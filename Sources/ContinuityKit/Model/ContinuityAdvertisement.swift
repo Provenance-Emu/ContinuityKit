@@ -34,6 +34,11 @@ public struct ContinuityAdvertisement: Codable, Hashable, Sendable {
     }
 }
 
+extension ContinuityAdvertisement: Identifiable {
+    /// Session-scoped identity (drives SwiftUI sheet presentation).
+    public var id: String { sessionId }
+}
+
 // MARK: - NSUserActivity userInfo bridging
 
 extension ContinuityAdvertisement {

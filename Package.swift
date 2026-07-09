@@ -21,9 +21,16 @@ let package = Package(
             targets: ["ContinuityKitTesting"]
         )
     ],
+    dependencies: [
+        // .iflypkg archives (share-sheet / AirDrop transport). Same pin as the app.
+        .package(url: "https://github.com/weichsel/ZIPFoundation.git", .upToNextMajor(from: "0.9.20"))
+    ],
     targets: [
         .target(
-            name: "ContinuityKit"
+            name: "ContinuityKit",
+            dependencies: [
+                .product(name: "ZIPFoundation", package: "ZIPFoundation")
+            ]
         ),
         .target(
             name: "ContinuityKitTesting",

@@ -165,33 +165,9 @@ public actor ContinuitySessionServer {
 
     private func buildManifest() async throws -> ContinuityManifest {
         guard let session else { throw ContinuityError.noActiveSession }
-        var files: [FileDescriptor] = []
-        files += try await fileProvider.enumerate(kind: .gameFile, identity: session.game)
-        files += try await fileProvider.enumerate(kind: .vmuPerGame, identity: session.game)
-        files += try await fileProvider.enumerate(kind: .vmuGlobal, identity: session.game)
-        let bios = try await fileProvider.enumerate(kind: .bios, identity: session.game)
-
-        let texturePacks = try await fileProvider.enumerate(kind: .texturePack, identity: session.game)
-        var extras: [OptionalExtra] = []
-        if !texturePacks.isEmpty {
-            extras.append(OptionalExtra(
-                kind: .texturePack,
-                label: "Texture pack",
-                totalSize: texturePacks.reduce(0) { $0 + $1.size },
-                fileCount: texturePacks.count
-            ))
-        }
-
-        let manifest = ContinuityManifest(
-            sessionId: session.sessionId,
-            mintedAt: Date(),
-            sourceDevice: sourceDevice,
-            game: session.game,
-            saveState: saveState,
-            files: files,
-            bios: bios,
-            optionalExtras: extras
-        )
+        let manifest = try await ContinuityManifestBuilder(
+            fileProvider: fileProvider, sourceDevice: sourceDevice
+        ).build(game: session.game, sessionId: session.sessionId, saveState: saveState)
         lastManifest = manifest
         return manifest
     }

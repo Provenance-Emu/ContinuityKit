@@ -15,14 +15,32 @@ public actor ContinuityPuller {
     // MARK: - Manifest
 
     /// Asks device A to mint a fresh save state and returns the resulting
-    /// manifest. The normal first call of a handoff.
-    public func mintAndFetchManifest(baseURL: URL, token: String) async throws -> ContinuityManifest {
-        try await fetchManifest(url: ContinuityRoutes.mintURL(base: baseURL), method: "POST", token: token)
+    /// manifest. The normal first call of a handoff. `extras` inlines opt-in
+    /// kinds (texture packs) as pullable file entries.
+    public func mintAndFetchManifest(
+        baseURL: URL,
+        token: String,
+        extras: Set<FileKind> = []
+    ) async throws -> ContinuityManifest {
+        try await fetchManifest(
+            url: ContinuityRoutes.mintURL(base: baseURL, extras: extras),
+            method: "POST",
+            token: token
+        )
     }
 
-    /// Fetches the manifest without minting (re-fetch after a partial pull).
-    public func fetchManifest(baseURL: URL, token: String) async throws -> ContinuityManifest {
-        try await fetchManifest(url: ContinuityRoutes.manifestURL(base: baseURL), method: "GET", token: token)
+    /// Fetches the manifest without minting (re-fetch after a partial pull or
+    /// after the user opts into extras).
+    public func fetchManifest(
+        baseURL: URL,
+        token: String,
+        extras: Set<FileKind> = []
+    ) async throws -> ContinuityManifest {
+        try await fetchManifest(
+            url: ContinuityRoutes.manifestURL(base: baseURL, extras: extras),
+            method: "GET",
+            token: token
+        )
     }
 
     private func fetchManifest(url: URL, method: String, token: String) async throws -> ContinuityManifest {

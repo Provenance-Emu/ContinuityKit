@@ -96,7 +96,7 @@ public actor ContinuitySessionServer {
     private func handleManifest(_ request: ContinuityHTTPRequest) async -> ContinuityHTTPResponse {
         if let denial = authorize(request) { return denial }
         do {
-            let manifest = try await buildManifest()
+            let manifest = try await buildManifest(extras: requestedExtras(request))
             return .json(try manifest.encoded())
         } catch {
             return .error(status: 500, message: "manifest build failed: \(error)")
@@ -108,11 +108,15 @@ public actor ContinuitySessionServer {
         guard let session else { return .error(status: 404, message: "no active handoff session") }
         do {
             saveState = try await minter.mintHandoffState(identity: session.game)
-            let manifest = try await buildManifest()
+            let manifest = try await buildManifest(extras: requestedExtras(request))
             return .json(try manifest.encoded())
         } catch {
             return .error(status: 500, message: "save state mint failed: \(error)")
         }
+    }
+
+    private func requestedExtras(_ request: ContinuityHTTPRequest) -> Set<FileKind> {
+        ContinuityRoutes.extras(fromQueryValue: request.query[ContinuityRoutes.extrasQueryKey])
     }
 
     private func handleFile(_ request: ContinuityHTTPRequest) async -> ContinuityHTTPResponse {
@@ -121,10 +125,12 @@ public actor ContinuitySessionServer {
             return .error(status: 400, message: "missing ?\(ContinuityRoutes.filePathQueryKey)=")
         }
         // Only manifest-listed files are servable — the manifest is the
-        // allowlist, so no path can escape the session's payload.
+        // allowlist, so no path can escape the session's payload. The
+        // allowlist is the SUPERSET manifest (extras inlined) so opt-in
+        // texture files are servable whenever the client asked for them.
         let manifest: ContinuityManifest
         do {
-            manifest = try await currentManifest()
+            manifest = try await allowlistManifest()
         } catch {
             return .error(status: 500, message: "manifest build failed: \(error)")
         }
@@ -158,17 +164,28 @@ public actor ContinuitySessionServer {
 
     // MARK: - Manifest assembly
 
-    private func currentManifest() async throws -> ContinuityManifest {
+    /// The file route's allowlist: always the superset (extras inlined), so
+    /// what a client can PULL never depends on which manifest variant it
+    /// fetched last.
+    private func allowlistManifest() async throws -> ContinuityManifest {
         if let lastManifest { return lastManifest }
-        return try await buildManifest()
+        return try await buildManifest(extras: [.texturePack])
     }
 
-    private func buildManifest() async throws -> ContinuityManifest {
+    private func buildManifest(extras: Set<FileKind>) async throws -> ContinuityManifest {
         guard let session else { throw ContinuityError.noActiveSession }
         let manifest = try await ContinuityManifestBuilder(
             fileProvider: fileProvider, sourceDevice: sourceDevice
-        ).build(game: session.game, sessionId: session.sessionId, saveState: saveState)
-        lastManifest = manifest
+        ).build(
+            game: session.game,
+            sessionId: session.sessionId,
+            saveState: saveState,
+            includeTexturePackFiles: extras.contains(.texturePack)
+        )
+        // Cache only the superset — see allowlistManifest.
+        if extras.contains(.texturePack) {
+            lastManifest = manifest
+        }
         return manifest
     }
 }

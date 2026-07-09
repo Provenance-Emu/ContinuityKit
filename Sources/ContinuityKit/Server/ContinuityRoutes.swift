@@ -6,6 +6,12 @@ public enum ContinuityRoutes {
     public static let mint = "/api/continuity/mint"
     public static let file = "/api/continuity/file"
 
+    // Cross-user pairing + trusted-peer auth (phase 3). All POST, JSON bodies.
+    public static let pairStart = "/api/continuity/pair/start"
+    public static let pairComplete = "/api/continuity/pair/complete"
+    public static let authStart = "/api/continuity/auth/start"
+    public static let authComplete = "/api/continuity/auth/complete"
+
     public static let filePathQueryKey = "path"
     /// Comma-separated FileKind raw values the client wants inlined in the
     /// manifest beyond the defaults (currently just "texturePack").

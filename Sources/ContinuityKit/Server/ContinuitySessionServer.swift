@@ -62,6 +62,10 @@ public actor ContinuitySessionServer {
 
     public var isSessionActive: Bool { session != nil }
 
+    /// The live session's bearer token — what the pairing/auth routes hand to
+    /// approved peers. nil when no session is active.
+    public var activeToken: String? { session?.token }
+
     // MARK: - Route registration
 
     /// Registers the continuity routes. Call once at server setup; safe to

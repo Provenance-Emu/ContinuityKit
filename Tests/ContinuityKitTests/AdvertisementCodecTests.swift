@@ -43,8 +43,21 @@ final class AdvertisementCodecTests: XCTestCase {
 
     func testTXTRejectsMissingRequiredKeys() {
         var txt = ContinuityTXTRecord.encode(sampleAdvertisement())
-        txt.removeValue(forKey: "tok")
+        txt.removeValue(forKey: "sid")
         XCTAssertNil(ContinuityTXTRecord.decode(txt))
+    }
+
+    /// A token-less TXT is the phase-3 redacted shape, not an error: it
+    /// decodes with an empty token and reads as requiresPairing.
+    func testTXTWithoutTokenDecodesAsPairingRequired() {
+        let redacted = sampleAdvertisement().redactedForBonjour()
+        let txt = ContinuityTXTRecord.encode(redacted)
+        XCTAssertNil(txt["tok"], "redacted advertisements must not publish a token key")
+
+        let decoded = ContinuityTXTRecord.decode(txt)
+        XCTAssertEqual(decoded, redacted)
+        XCTAssertEqual(decoded?.requiresPairing, true)
+        XCTAssertEqual(sampleAdvertisement().requiresPairing, false)
     }
 
     func testTXTDecodesWithoutOptionalFields() {

@@ -23,10 +23,12 @@ public enum ContinuityTXTRecord {
         var txt: [String: String] = [
             Key.version: String(advertisement.payloadVersion),
             Key.sessionId: advertisement.sessionId,
-            Key.token: advertisement.token,
             Key.displayName: String(advertisement.game.displayName.prefix(180)),
             Key.platform: advertisement.game.platform
         ]
+        // Empty token = pairing required (redacted Bonjour advertisement);
+        // the key is omitted rather than published blank.
+        if !advertisement.token.isEmpty { txt[Key.token] = advertisement.token }
         if let gid = advertisement.game.flycastGameId { txt[Key.flycastGameId] = gid }
         if let md5 = advertisement.game.md5Hash { txt[Key.md5] = md5 }
         if let serial = advertisement.game.serial { txt[Key.serial] = serial }
@@ -42,10 +44,11 @@ public enum ContinuityTXTRecord {
             let versionString = txt[Key.version],
             let version = Int(versionString),
             let sessionId = txt[Key.sessionId],
-            let token = txt[Key.token],
             let displayName = txt[Key.displayName],
             let platform = txt[Key.platform]
         else { return nil }
+        // Missing token = the server requires pairing/auth to obtain one.
+        let token = txt[Key.token] ?? ""
 
         var urls: [URL] = []
         for index in 0..<maxURLCandidates {

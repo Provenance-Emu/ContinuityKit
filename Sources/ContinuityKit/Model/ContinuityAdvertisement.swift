@@ -4,9 +4,10 @@ import Foundation
 /// Carried in the NSUserActivity userInfo (iOS/iPadOS/macOS Handoff) and in
 /// the Bonjour TXT record (tvOS and the in-app browse path).
 ///
-/// Note: on the Bonjour path the token is visible to the local network. That
-/// is the phase-1 trust model (same-user LAN); cross-user sharing gets a
-/// pairing/approval step before it ever ships.
+/// Trust model (phase 3): the Handoff activity is same-user and private, so
+/// it carries the token inline. The Bonjour TXT record is LAN-visible, so it
+/// is published REDACTED (empty token) — receivers obtain the token via
+/// trusted-peer auth or the code-verified pairing flow.
 public struct ContinuityAdvertisement: Codable, Hashable, Sendable {
     public var payloadVersion: Int
     public var sessionId: String
@@ -37,6 +38,18 @@ public struct ContinuityAdvertisement: Codable, Hashable, Sendable {
 extension ContinuityAdvertisement: Identifiable {
     /// Session-scoped identity (drives SwiftUI sheet presentation).
     public var id: String { sessionId }
+}
+
+extension ContinuityAdvertisement {
+    /// True when the receiver must pair/authenticate to obtain the token.
+    public var requiresPairing: Bool { token.isEmpty }
+
+    /// LAN-safe copy for the Bonjour TXT record: everything but the token.
+    public func redactedForBonjour() -> ContinuityAdvertisement {
+        var copy = self
+        copy.token = ""
+        return copy
+    }
 }
 
 // MARK: - NSUserActivity userInfo bridging

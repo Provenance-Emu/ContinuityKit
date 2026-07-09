@@ -164,12 +164,12 @@ public actor ContinuitySessionServer {
 
     // MARK: - Manifest assembly
 
-    /// The file route's allowlist: always the superset (extras inlined), so
-    /// what a client can PULL never depends on which manifest variant it
-    /// fetched last.
+    /// The file route's allowlist: always the superset (all opt-in kinds
+    /// inlined), so what a client can PULL never depends on which manifest
+    /// variant it fetched last.
     private func allowlistManifest() async throws -> ContinuityManifest {
         if let lastManifest { return lastManifest }
-        return try await buildManifest(extras: [.texturePack])
+        return try await buildManifest(extras: FileKind.optInKinds)
     }
 
     private func buildManifest(extras: Set<FileKind>) async throws -> ContinuityManifest {
@@ -180,10 +180,11 @@ public actor ContinuitySessionServer {
             game: session.game,
             sessionId: session.sessionId,
             saveState: saveState,
-            includeTexturePackFiles: extras.contains(.texturePack)
+            includeTexturePackFiles: extras.contains(.texturePack),
+            includeAllVMUFiles: extras.contains(.vmuAll)
         )
         // Cache only the superset — see allowlistManifest.
-        if extras.contains(.texturePack) {
+        if extras.isSuperset(of: FileKind.optInKinds) {
             lastManifest = manifest
         }
         return manifest

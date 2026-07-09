@@ -20,12 +20,15 @@ public struct ContinuityManifestBuilder: Sendable {
     ///     enumerates as `.saveState` file entries (package export).
     ///   - includeTexturePackFiles: inline texture-pack files instead of
     ///     summarizing them as an opt-in extra (package export with textures).
+    ///   - includeAllVMUFiles: inline the full VMU-card set (every game's
+    ///     cards) instead of summarizing it as an opt-in extra.
     public func build(
         game: GameIdentity,
         sessionId: String,
         saveState: SaveStateDescriptor? = nil,
         includeSaveStateFiles: Bool = false,
-        includeTexturePackFiles: Bool = false
+        includeTexturePackFiles: Bool = false,
+        includeAllVMUFiles: Bool = false
     ) async throws -> ContinuityManifest {
         var files: [FileDescriptor] = []
         files += try await fileProvider.enumerate(kind: .gameFile, identity: game)
@@ -39,8 +42,26 @@ public struct ContinuityManifestBuilder: Sendable {
 
         let bios = try await fileProvider.enumerate(kind: .bios, identity: game)
 
-        let texturePacks = try await fileProvider.enumerate(kind: .texturePack, identity: game)
         var extras: [OptionalExtra] = []
+
+        // The all-VMU set overlaps the session game's cards (already in
+        // `files` as required entries) — only the OTHER games' cards are the
+        // opt-in delta, so the prompt's size/count don't overstate.
+        let alreadyIncluded = Set(files.map(\.relativePath))
+        let allVMU = try await fileProvider.enumerate(kind: .vmuAll, identity: game)
+            .filter { !alreadyIncluded.contains($0.relativePath) }
+        if includeAllVMUFiles {
+            files += allVMU
+        } else if !allVMU.isEmpty {
+            extras.append(OptionalExtra(
+                kind: .vmuAll,
+                label: "All VMU cards",
+                totalSize: allVMU.reduce(0) { $0 + $1.size },
+                fileCount: allVMU.count
+            ))
+        }
+
+        let texturePacks = try await fileProvider.enumerate(kind: .texturePack, identity: game)
         if includeTexturePackFiles {
             files += texturePacks
         } else if !texturePacks.isEmpty {

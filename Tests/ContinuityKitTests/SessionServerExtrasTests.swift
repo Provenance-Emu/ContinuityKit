@@ -84,10 +84,66 @@ final class SessionServerExtrasTests: XCTestCase {
     func testExtrasQueryParsing() {
         XCTAssertEqual(ContinuityRoutes.extras(fromQueryValue: "texturePack"), [.texturePack])
         XCTAssertEqual(ContinuityRoutes.extras(fromQueryValue: "texturePack,unknown"), [.texturePack])
+        XCTAssertEqual(ContinuityRoutes.extras(fromQueryValue: "vmuAll,texturePack"), [.vmuAll, .texturePack])
         XCTAssertEqual(ContinuityRoutes.extras(fromQueryValue: nil), [])
         XCTAssertEqual(ContinuityRoutes.extras(fromQueryValue: ""), [])
 
         let url = ContinuityRoutes.manifestURL(base: URL(string: "http://a.local:8080")!, extras: [.texturePack])
         XCTAssertTrue(url.absoluteString.contains("extras=texturePack"))
+    }
+
+    // MARK: - All-VMU set
+
+    /// Seeds the session game's own card (required, also visible to `.vmuAll`)
+    /// plus another game's card (the opt-in delta).
+    private func seedVMUCards() throws {
+        let sessionCard = try provider.seedFile(
+            kind: .vmuPerGame,
+            relativePath: "Flycast/T-8111N_vmu_save_A1.bin",
+            contents: Data("session-card".utf8)
+        )
+        let foreignCard = try provider.seedFile(
+            kind: .vmuAll,
+            relativePath: "Flycast/T-9502N_vmu_save_A1.bin",
+            contents: Data("foreign-card-bytes".utf8),
+            required: false
+        )
+        provider.setEnumerated(kind: .vmuPerGame, descriptors: [sessionCard])
+        var sessionCardAsAll = sessionCard
+        sessionCardAsAll.kind = .vmuAll
+        provider.setEnumerated(kind: .vmuAll, descriptors: [sessionCardAsAll, foreignCard])
+    }
+
+    func testDefaultManifestSummarizesAllVMUDelta() async throws {
+        try seedVMUCards()
+        let manifest = try await fetchManifest(query: [:])
+        // The session game's card rides as a required entry, not as vmuAll.
+        XCTAssertTrue(manifest.files.contains { $0.kind == .vmuPerGame })
+        XCTAssertFalse(manifest.files.contains { $0.kind == .vmuAll })
+        // Only the OTHER game's card counts toward the opt-in delta.
+        let extra = manifest.optionalExtras.first { $0.kind == .vmuAll }
+        XCTAssertEqual(extra?.fileCount, 1)
+        XCTAssertEqual(extra?.totalSize, Int64("foreign-card-bytes".utf8.count))
+    }
+
+    func testExtrasQueryInlinesAllVMUDelta() async throws {
+        try seedVMUCards()
+        let manifest = try await fetchManifest(query: ["extras": "vmuAll"])
+        let inlined = manifest.files.filter { $0.kind == .vmuAll }
+        XCTAssertEqual(inlined.map(\.relativePath), ["Flycast/T-9502N_vmu_save_A1.bin"])
+        // Textures weren't requested — still summarized.
+        XCTAssertEqual(manifest.optionalExtras.map(\.kind), [.texturePack])
+    }
+
+    func testVMUFileServableEvenAfterDefaultManifestFetch() async throws {
+        try seedVMUCards()
+        _ = try await fetchManifest(query: [:])
+        let response = await registrar.invoke(
+            method: "GET",
+            path: ContinuityRoutes.file,
+            query: ["path": "Flycast/T-9502N_vmu_save_A1.bin"],
+            headers: ["Authorization": "Bearer \(token)"]
+        )
+        XCTAssertEqual(response?.status, 200)
     }
 }

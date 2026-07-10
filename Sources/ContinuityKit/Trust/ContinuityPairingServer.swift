@@ -114,7 +114,7 @@ public actor ContinuityPairingServer {
             let approved = await Self.withTimeout(Self.pairingLifetime) {
                 await approver.approvePairing(peerName: body.name, code: code)
             } ?? false
-            await self.resolveApproval(pairingId: pairingId, approved: approved)
+            self.resolveApproval(pairingId: pairingId, approved: approved)
         }
 
         return encode(ContinuityPairingMessages.PairStartResponse(

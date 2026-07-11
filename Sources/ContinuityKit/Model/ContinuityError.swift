@@ -9,6 +9,8 @@ public enum ContinuityError: Error, Equatable, Sendable {
     case gameNotFoundLocally
     case insufficientToBoot
     case noActiveSession
+    /// The host's free daily pull allowance is used up (server 429).
+    case hostLimitReached
     case cancelled
 }
 
@@ -32,6 +34,8 @@ extension ContinuityError: LocalizedError {
             return "Not enough was transferred to start the game on this device."
         case .noActiveSession:
             return "No handoff session is active on the other device."
+        case .hostLimitReached:
+            return "The other device has used its free handoffs for today. iFly Pro removes the limit."
         case .cancelled:
             return "The transfer was cancelled."
         }

@@ -13,6 +13,11 @@ public struct ContinuityPairingClient: Sendable {
         case wrongCode
         case notPaired
         case noActiveSession
+        /// The host's free daily pull allowance is used up (server 429).
+        case hostLimitReached
+        /// The host doesn't serve the code-less continue routes (older app
+        /// version) — fall back to the code-verified pairing flow.
+        case continueUnsupported
         case invalidResponse(status: Int)
     }
 
@@ -82,6 +87,71 @@ public struct ContinuityPairingClient: Sendable {
                 throw PairingError.noActiveSession
             case 410:
                 throw PairingError.expired
+            case 429:
+                throw PairingError.hostLimitReached
+            default:
+                throw PairingError.invalidResponse(status: response.status)
+            }
+        }
+    }
+
+    // MARK: - Code-less continue request
+
+    /// Asks the serving user to allow this pull ("X wants to continue — the
+    /// host taps Allow"), polling through the 202 approval window like
+    /// pairing does. No code entry; durable trust only if the host chose
+    /// "Always Allow". Returns the session token.
+    ///
+    /// Throws `.continueUnsupported` when the host predates the route —
+    /// callers fall back to `startPairing`/`completePairing`.
+    public func requestContinue(
+        baseURL: URL,
+        identity: ContinuityPeerIdentity
+    ) async throws -> String {
+        let startResponse = try await rawPost(
+            url: baseURL.appendingPathComponent(ContinuityRoutes.continueStart),
+            body: ContinuityPairingMessages.ContinueStartRequest(
+                peerId: identity.id, name: identity.name, publicKey: identity.publicKeyData
+            )
+        )
+        switch startResponse.status {
+        case 200:
+            break
+        case 404:
+            // Unknown route (old host) and "no active session" are both 404
+            // here; the pairing fallback disambiguates (its routes always
+            // exist on hosts that advertise).
+            throw PairingError.continueUnsupported
+        case 429:
+            throw PairingError.hostLimitReached
+        default:
+            throw PairingError.invalidResponse(status: startResponse.status)
+        }
+        let start = try JSONDecoder().decode(
+            ContinuityPairingMessages.ContinueStartResponse.self, from: startResponse.body
+        )
+
+        let pollURL = baseURL.appendingPathComponent(ContinuityRoutes.continuePoll)
+        let pollBody = ContinuityPairingMessages.ContinuePollRequest(requestId: start.requestId)
+        while true {
+            try Task.checkCancellation()
+            let response = try await rawPost(url: pollURL, body: pollBody)
+            switch response.status {
+            case 200:
+                let payload = try JSONDecoder().decode(
+                    ContinuityPairingMessages.SessionTokenResponse.self, from: response.body
+                )
+                return payload.sessionToken
+            case 202:
+                try await Task.sleep(nanoseconds: UInt64(approvalPollInterval * 1_000_000_000))
+            case 403:
+                throw PairingError.declined
+            case 404:
+                throw PairingError.noActiveSession
+            case 410:
+                throw PairingError.expired
+            case 429:
+                throw PairingError.hostLimitReached
             default:
                 throw PairingError.invalidResponse(status: response.status)
             }
@@ -142,6 +212,8 @@ public struct ContinuityPairingClient: Sendable {
             throw PairingError.noActiveSession
         case 410:
             throw PairingError.expired
+        case 429:
+            throw PairingError.hostLimitReached
         default:
             throw PairingError.invalidResponse(status: response.status)
         }

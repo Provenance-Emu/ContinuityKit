@@ -12,6 +12,12 @@ public enum ContinuityRoutes {
     public static let authStart = "/api/continuity/auth/start"
     public static let authComplete = "/api/continuity/auth/complete"
 
+    // Code-less continue requests (always-discoverable flow): start files the
+    // request and fires the host's Allow/Deny prompt; poll answers 202 until
+    // the host decides. Both POST, JSON bodies.
+    public static let continueStart = "/api/continuity/continue/start"
+    public static let continuePoll = "/api/continuity/continue/poll"
+
     public static let filePathQueryKey = "path"
     /// Comma-separated FileKind raw values the client wants inlined in the
     /// manifest beyond the defaults (currently just "texturePack").

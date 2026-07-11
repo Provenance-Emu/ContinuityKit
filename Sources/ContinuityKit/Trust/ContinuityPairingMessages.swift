@@ -71,8 +71,42 @@ public enum ContinuityPairingMessages {
         }
     }
 
-    /// Terminal success payload for both pair/complete and auth/complete: the
-    /// active session's bearer token.
+    public struct ContinueStartRequest: Codable, Sendable {
+        public var peerId: String
+        public var name: String
+        /// Carried so an "Always Allow" answer can add the peer to the trust
+        /// store (trust-on-first-use) without a separate pairing round.
+        public var publicKey: Data
+
+        public init(peerId: String, name: String, publicKey: Data) {
+            self.peerId = peerId
+            self.name = name
+            self.publicKey = publicKey
+        }
+    }
+
+    public struct ContinueStartResponse: Codable, Sendable {
+        public var requestId: String
+        public var serverId: String
+        public var serverName: String
+
+        public init(requestId: String, serverId: String, serverName: String) {
+            self.requestId = requestId
+            self.serverId = serverId
+            self.serverName = serverName
+        }
+    }
+
+    public struct ContinuePollRequest: Codable, Sendable {
+        public var requestId: String
+
+        public init(requestId: String) {
+            self.requestId = requestId
+        }
+    }
+
+    /// Terminal success payload for pair/complete, auth/complete, and
+    /// continue/poll: the active session's bearer token.
     public struct SessionTokenResponse: Codable, Sendable {
         public var sessionToken: String
 

@@ -41,26 +41,49 @@ public actor ContinuityPairingServer {
         let expiresAt: Date
     }
 
+    private struct PendingContinue {
+        let peerId: String
+        let peerName: String
+        let peerPublicKey: Data
+        let expiresAt: Date
+        var decision: Decision = .pending
+
+        enum Decision { case pending, allowOnce, allowAlways, denied }
+    }
+
     private let identity: ContinuityPeerIdentity
     private let trustStore: any ContinuityTrustStore
     private let approver: any ContinuityPairingApproving
+    /// Answers code-less continue requests. nil = the feature is off and
+    /// continue/start responds 404 (older hosts behave identically because the
+    /// route doesn't exist — clients treat both as "fall back to pairing").
+    private let continueApprover: (any ContinuityContinueApproving)?
     /// The active handoff session's token, or nil when no session is live.
     private let sessionTokenProvider: @Sendable () async -> String?
+    /// Consulted once per token handout (pair/complete, auth/complete,
+    /// continue/poll success). Returning false answers 429 — the host's seam
+    /// for metering pulls (free-tier allowance). The default never limits.
+    private let grantPolicy: @Sendable () async -> Bool
 
     private var pendingPairings: [String: PendingPairing] = [:]
     private var pendingAuths: [String: PendingAuth] = [:]
+    private var pendingContinues: [String: PendingContinue] = [:]
     private var routesRegistered = false
 
     public init(
         identity: ContinuityPeerIdentity,
         trustStore: any ContinuityTrustStore,
         approver: any ContinuityPairingApproving,
-        sessionTokenProvider: @escaping @Sendable () async -> String?
+        continueApprover: (any ContinuityContinueApproving)? = nil,
+        sessionTokenProvider: @escaping @Sendable () async -> String?,
+        grantPolicy: @escaping @Sendable () async -> Bool = { true }
     ) {
         self.identity = identity
         self.trustStore = trustStore
         self.approver = approver
+        self.continueApprover = continueApprover
         self.sessionTokenProvider = sessionTokenProvider
+        self.grantPolicy = grantPolicy
     }
 
     /// Registers the pairing/auth routes. Call once at server setup; safe to
@@ -80,6 +103,14 @@ public actor ContinuityPairingServer {
         }
         registrar.register(method: "POST", path: ContinuityRoutes.authComplete) { [weak self] request in
             await self?.handleAuthComplete(request) ?? .error(status: 404, message: "unavailable")
+        }
+        if continueApprover != nil {
+            registrar.register(method: "POST", path: ContinuityRoutes.continueStart) { [weak self] request in
+                await self?.handleContinueStart(request) ?? .error(status: 404, message: "unavailable")
+            }
+            registrar.register(method: "POST", path: ContinuityRoutes.continuePoll) { [weak self] request in
+                await self?.handleContinuePoll(request) ?? .error(status: 404, message: "unavailable")
+            }
         }
     }
 
@@ -223,11 +254,94 @@ public actor ContinuityPairingServer {
         return await sessionTokenResponse()
     }
 
+    // MARK: - Code-less continue requests
+
+    private func handleContinueStart(_ request: ContinuityHTTPRequest) async -> ContinuityHTTPResponse {
+        guard let continueApprover else {
+            return .error(status: 404, message: "unavailable")
+        }
+        guard let body: ContinuityPairingMessages.ContinueStartRequest = decode(request) else {
+            return .error(status: 400, message: "invalid continue request")
+        }
+        pruneContinues()
+        guard pendingContinues.count < Self.maxPendingPairings else {
+            return .error(status: 429, message: "too many continue requests in flight")
+        }
+
+        let requestId = UUID().uuidString
+        pendingContinues[requestId] = PendingContinue(
+            peerId: body.peerId,
+            peerName: body.name,
+            peerPublicKey: body.publicKey,
+            expiresAt: Date().addingTimeInterval(Self.pairingLifetime)
+        )
+
+        // Same shape as pairing: the prompt runs detached and is raced against
+        // the request lifetime so a never-answered alert can't wedge the seam.
+        Task {
+            let decision = await Self.withTimeout(Self.pairingLifetime) {
+                await continueApprover.approveContinue(peerName: body.name)
+            } ?? ContinuityContinueDecision.deny
+            self.resolveContinue(requestId: requestId, decision: decision)
+        }
+
+        return encode(ContinuityPairingMessages.ContinueStartResponse(
+            requestId: requestId,
+            serverId: identity.id,
+            serverName: identity.name
+        ))
+    }
+
+    private func resolveContinue(requestId: String, decision: ContinuityContinueDecision) {
+        guard var pending = pendingContinues[requestId] else { return }
+        switch decision {
+        case .allowOnce: pending.decision = .allowOnce
+        case .allowAlways: pending.decision = .allowAlways
+        case .deny: pending.decision = .denied
+        }
+        pendingContinues[requestId] = pending
+    }
+
+    private func handleContinuePoll(_ request: ContinuityHTTPRequest) async -> ContinuityHTTPResponse {
+        guard let body: ContinuityPairingMessages.ContinuePollRequest = decode(request) else {
+            return .error(status: 400, message: "invalid continue poll")
+        }
+        guard let pending = pendingContinues[body.requestId], pending.expiresAt > Date() else {
+            pendingContinues[body.requestId] = nil
+            return .error(status: 410, message: "continue request expired or unknown")
+        }
+
+        switch pending.decision {
+        case .pending:
+            return .error(status: 202, message: "waiting for approval on the other device")
+        case .denied:
+            pendingContinues[body.requestId] = nil
+            return .error(status: 403, message: "the other device declined")
+        case .allowOnce, .allowAlways:
+            break
+        }
+
+        pendingContinues[body.requestId] = nil
+        if pending.decision == .allowAlways {
+            await trustStore.add(TrustedPeer(
+                id: pending.peerId,
+                name: pending.peerName,
+                publicKey: pending.peerPublicKey
+            ))
+        }
+        return await sessionTokenResponse()
+    }
+
     // MARK: - Helpers
 
     private func sessionTokenResponse() async -> ContinuityHTTPResponse {
         guard let token = await sessionTokenProvider() else {
             return .error(status: 404, message: "no active handoff session")
+        }
+        // The host's metering seam — every token handout (pairing, silent
+        // auth, continue) is one accountable "pull".
+        guard await grantPolicy() else {
+            return .error(status: 429, message: "the other device's free daily pulls are used up")
         }
         return encode(ContinuityPairingMessages.SessionTokenResponse(sessionToken: token))
     }
@@ -242,14 +356,19 @@ public actor ContinuityPairingServer {
         pendingAuths = pendingAuths.filter { $0.value.expiresAt > now }
     }
 
+    private func pruneContinues() {
+        let now = Date()
+        pendingContinues = pendingContinues.filter { $0.value.expiresAt > now }
+    }
+
     /// nil on timeout. The losing task isn't force-killed (an approval prompt
     /// awaiting a continuation can't be cancelled) — a late answer is simply
     /// dropped, and resolveApproval on a pruned pairingId no-ops.
-    private static func withTimeout(
+    private static func withTimeout<T: Sendable>(
         _ seconds: TimeInterval,
-        _ body: @escaping @Sendable () async -> Bool
-    ) async -> Bool? {
-        await withTaskGroup(of: Bool?.self) { group in
+        _ body: @escaping @Sendable () async -> T
+    ) async -> T? {
+        await withTaskGroup(of: T?.self) { group in
             group.addTask { await body() }
             group.addTask {
                 try? await Task.sleep(nanoseconds: UInt64(seconds * 1_000_000_000))

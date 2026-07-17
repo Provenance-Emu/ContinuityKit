@@ -207,14 +207,51 @@ public actor ContinuityLibraryServer {
         pendingAuths = pendingAuths.filter { $0.value.expiresAt > now }
     }
 
-    // MARK: - Manifest / art (Task 4 replaces these bodies)
+    // MARK: - Manifest / art
+
+    /// nil = authorized. Sharing off masks everything as 404; a missing or
+    /// wrong token is 401. Any peer's live library token is acceptable — the
+    /// routes are read-only and grant-scoped at token-mint time.
+    private func authorize(_ request: ContinuityHTTPRequest) async -> ContinuityHTTPResponse? {
+        guard await sharingEnabled() else {
+            return .error(status: 404, message: "library sharing unavailable")
+        }
+        let header = request.header("Authorization")
+        guard validatorsByPeer.values.contains(where: { $0.validate(authorizationHeader: header) }) else {
+            return .error(status: 401, message: "invalid or missing library token")
+        }
+        return nil
+    }
 
     private func handleManifest(_ request: ContinuityHTTPRequest) async -> ContinuityHTTPResponse {
-        .error(status: 404, message: "not implemented")
+        if let denial = await authorize(request) { return denial }
+        do {
+            let manifest = try await provider.libraryManifest()
+            return .json(try manifest.encoded())
+        } catch {
+            return .error(status: 500, message: "library manifest build failed: \(error)")
+        }
     }
 
     private func handleArt(_ request: ContinuityHTTPRequest) async -> ContinuityHTTPResponse {
-        .error(status: 404, message: "not implemented")
+        if let denial = await authorize(request) { return denial }
+        guard let key = request.query[ContinuityRoutes.artKeyQueryKey], !key.isEmpty else {
+            return .error(status: 400, message: "missing ?\(ContinuityRoutes.artKeyQueryKey)=")
+        }
+        // Keys are cache FILENAMES, never paths — reject any traversal shape
+        // before the provider touches the filesystem.
+        guard !key.contains("/"), !key.contains("\\"), !key.contains("..") else {
+            return .error(status: 400, message: "invalid art key")
+        }
+        guard let url = await provider.artworkFileURL(forKey: key) else {
+            return .error(status: 404, message: "no artwork for key")
+        }
+        return ContinuityHTTPResponse(
+            status: 200,
+            contentType: "application/octet-stream",
+            headers: [:],
+            body: .file(url: url, offset: 0, length: nil)
+        )
     }
 
     // MARK: - Helpers (same shapes as ContinuityPairingServer's private ones)

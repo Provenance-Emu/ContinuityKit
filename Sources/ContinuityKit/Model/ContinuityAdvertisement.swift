@@ -12,19 +12,28 @@ public struct ContinuityAdvertisement: Codable, Hashable, Sendable {
     public var payloadVersion: Int
     public var sessionId: String
     public var token: String
-    public var game: GameIdentity
+    /// nil = LIBRARY-PRESENCE advert (app open + Share My Library on, no
+    /// active handoff session). Receivers must not offer a game pull for it.
+    public var game: GameIdentity?
     public var saveStateStem: String?
     /// Candidate base URLs for the session server, most-preferred first
     /// (Bonjour .local hostname, then raw IP fallbacks).
     public var urlCandidates: [URL]
+    /// True when this device serves the Nearby Libraries browse routes.
+    public var sharesLibrary: Bool
+    /// Stable pairing-identity id of the advertiser — lets browsers dedupe
+    /// and address the library auth flow before any trust exists.
+    public var peerId: String?
 
     public init(
         payloadVersion: Int = ContinuityManifest.currentVersion,
         sessionId: String,
         token: String,
-        game: GameIdentity,
+        game: GameIdentity?,
         saveStateStem: String? = nil,
-        urlCandidates: [URL]
+        urlCandidates: [URL],
+        sharesLibrary: Bool = false,
+        peerId: String? = nil
     ) {
         self.payloadVersion = payloadVersion
         self.sessionId = sessionId
@@ -32,6 +41,8 @@ public struct ContinuityAdvertisement: Codable, Hashable, Sendable {
         self.game = game
         self.saveStateStem = saveStateStem
         self.urlCandidates = urlCandidates
+        self.sharesLibrary = sharesLibrary
+        self.peerId = peerId
     }
 }
 

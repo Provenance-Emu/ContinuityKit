@@ -60,6 +60,36 @@ final class AdvertisementCodecTests: XCTestCase {
         XCTAssertEqual(sampleAdvertisement().requiresPairing, false)
     }
 
+    func testLibraryPresenceAdvertRoundTripsWithoutGame() throws {
+        let advert = ContinuityAdvertisement(
+            sessionId: "library-presence-1",
+            token: "",
+            game: nil,
+            urlCandidates: [try XCTUnwrap(URL(string: "http://host.local:8080"))],
+            sharesLibrary: true,
+            peerId: "peer-42"
+        )
+        let decoded = ContinuityTXTRecord.decode(ContinuityTXTRecord.encode(advert))
+        XCTAssertNotNil(decoded)
+        XCTAssertNil(decoded?.game)
+        XCTAssertEqual(decoded?.sharesLibrary, true)
+        XCTAssertEqual(decoded?.peerId, "peer-42")
+    }
+
+    func testGameAdvertCarriesLibraryFlagAlongside() {
+        let advert = ContinuityAdvertisement(
+            sessionId: "s1",
+            token: "",
+            game: GameIdentity(md5Hash: "abc", displayName: "Ikaruga", platform: "Dreamcast"),
+            urlCandidates: [],
+            sharesLibrary: true,
+            peerId: "peer-42"
+        )
+        let decoded = ContinuityTXTRecord.decode(ContinuityTXTRecord.encode(advert))
+        XCTAssertEqual(decoded?.game?.displayName, "Ikaruga")
+        XCTAssertEqual(decoded?.sharesLibrary, true)
+    }
+
     func testTXTDecodesWithoutOptionalFields() {
         let minimal = ContinuityAdvertisement(
             sessionId: "s",

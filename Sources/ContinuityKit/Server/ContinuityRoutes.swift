@@ -23,6 +23,24 @@ public enum ContinuityRoutes {
     /// manifest beyond the defaults (currently just "texturePack").
     public static let extrasQueryKey = "extras"
 
+    // Nearby Libraries (browse). Auth routes are POST/JSON; manifest and art
+    // are GETs guarded by the LIBRARY bearer token (never the session token,
+    // never metered — browsing is free by design).
+    public static let libraryAuthStart = "/api/continuity/library/auth/start"
+    public static let libraryAuthComplete = "/api/continuity/library/auth/complete"
+    public static let libraryManifest = "/api/continuity/library/manifest"
+    public static let libraryArt = "/api/continuity/library/art"
+    public static let artKeyQueryKey = "key"
+
+    /// URL for one artwork thumb by its opaque manifest `artKey`.
+    public static func libraryArtURL(base: URL, key: String) -> URL {
+        var components = URLComponents(
+            url: base.appendingPathComponent(libraryArt), resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: artKeyQueryKey, value: key)]
+        return components?.url ?? base
+    }
+
     /// URL for pulling one descriptor from a session server.
     public static func fileURL(base: URL, relativePath: String) -> URL {
         var components = URLComponents(url: base.appendingPathComponent(file), resolvingAgainstBaseURL: false)

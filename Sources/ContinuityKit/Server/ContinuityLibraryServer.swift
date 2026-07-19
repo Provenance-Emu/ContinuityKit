@@ -32,9 +32,18 @@ public actor ContinuityLibraryServer {
     /// Read per request — flipping "Share My Library" off must take effect
     /// immediately, not at next activation.
     private let sharingEnabled: @Sendable () async -> Bool
+    /// nil = this host can't serve pulls (routes answer 404).
+    private let pullProvider: (any ContinuityLibraryPullProviding)?
+    /// Metering seam: consulted once per pull request; false → 429. Browse
+    /// routes never touch it — browsing is free by design.
+    private let pullPolicy: @Sendable () async -> Bool
 
     private var pendingAuths: [String: PendingAuth] = [:]
     private var validatorsByPeer: [String: BearerTokenValidator] = [:]
+    /// Union of every granted pull manifest's descriptors, by relative path —
+    /// the file route's allowlist (same manifest-is-the-allowlist rule the
+    /// session server uses). Bounded by library size; cleared with tokens.
+    private var pullAllowlist: [String: FileDescriptor] = [:]
     private var routesRegistered = false
 
     public init(
@@ -43,7 +52,9 @@ public actor ContinuityLibraryServer {
         grantStore: any ContinuityLibraryGrantStore,
         approver: any ContinuityLibraryBrowseApproving,
         provider: any ContinuityLibraryProviding,
-        sharingEnabled: @escaping @Sendable () async -> Bool
+        sharingEnabled: @escaping @Sendable () async -> Bool,
+        pullProvider: (any ContinuityLibraryPullProviding)? = nil,
+        pullPolicy: @escaping @Sendable () async -> Bool = { true }
     ) {
         self.identity = identity
         self.trustStore = trustStore
@@ -51,6 +62,8 @@ public actor ContinuityLibraryServer {
         self.approver = approver
         self.provider = provider
         self.sharingEnabled = sharingEnabled
+        self.pullProvider = pullProvider
+        self.pullPolicy = pullPolicy
     }
 
     /// Registers the library routes. Call once at server setup; safe to call
@@ -71,6 +84,12 @@ public actor ContinuityLibraryServer {
         registrar.register(method: "GET", path: ContinuityRoutes.libraryArt) { [weak self] request in
             await self?.handleArt(request) ?? .error(status: 404, message: "unavailable")
         }
+        registrar.register(method: "POST", path: ContinuityRoutes.libraryPull) { [weak self] request in
+            await self?.handlePull(request) ?? .error(status: 404, message: "unavailable")
+        }
+        registrar.register(method: "GET", path: ContinuityRoutes.libraryFile) { [weak self] request in
+            await self?.handleLibraryFile(request) ?? .error(status: 404, message: "unavailable")
+        }
     }
 
     /// Drops every outstanding library token (sharing toggled off, or the
@@ -78,6 +97,7 @@ public actor ContinuityLibraryServer {
     public func revokeAllTokens() {
         validatorsByPeer = [:]
         pendingAuths = [:]
+        pullAllowlist = [:]
     }
 
     public func revokeToken(forPeerId peerId: String) {
@@ -252,6 +272,74 @@ public actor ContinuityLibraryServer {
             headers: [:],
             body: .file(url: url, offset: 0, length: nil)
         )
+    }
+
+    // MARK: - Pull / file
+
+    private func handlePull(_ request: ContinuityHTTPRequest) async -> ContinuityHTTPResponse {
+        if let denial = await authorize(request) { return denial }
+        guard let pullProvider else {
+            return .error(status: 404, message: "pulls unavailable on this host")
+        }
+        guard let body: ContinuityLibraryMessages.PullRequest = Self.decode(request) else {
+            return .error(status: 400, message: "invalid pull request")
+        }
+        // The ONLY metered library route: policy false = the host's free
+        // pulls are spent (client shows the Pro upsell copy).
+        guard await pullPolicy() else {
+            return .error(status: 429, message: "host's free pulls used for today")
+        }
+        do {
+            guard let manifest = try await pullProvider.pullManifest(forGameId: body.gameId) else {
+                return .error(status: 404, message: "no such library game")
+            }
+            for descriptor in manifest.allDescriptors {
+                pullAllowlist[descriptor.relativePath] = descriptor
+            }
+            return .json(try manifest.encoded())
+        } catch {
+            return .error(status: 500, message: "pull manifest build failed: \(error)")
+        }
+    }
+
+    private func handleLibraryFile(_ request: ContinuityHTTPRequest) async -> ContinuityHTTPResponse {
+        if let denial = await authorize(request) { return denial }
+        guard let pullProvider else {
+            return .error(status: 404, message: "pulls unavailable on this host")
+        }
+        guard let relativePath = request.query[ContinuityRoutes.filePathQueryKey], !relativePath.isEmpty else {
+            return .error(status: 400, message: "missing ?\(ContinuityRoutes.filePathQueryKey)=")
+        }
+        // Granted pull manifests are the allowlist — a path outside them
+        // (traversal or guessing) is indistinguishable from absent.
+        guard let descriptor = pullAllowlist[relativePath] else {
+            return .error(status: 404, message: "not part of a granted pull")
+        }
+        do {
+            guard let url = try await pullProvider.fileURL(forRelativePath: relativePath) else {
+                return .error(status: 404, message: "file unavailable")
+            }
+            if let range = ByteRangeRequest.parse(header: request.header("Range")) {
+                guard let length = range.length(totalSize: descriptor.size),
+                      let contentRange = range.contentRange(totalSize: descriptor.size) else {
+                    return .error(status: 416, message: "range not satisfiable")
+                }
+                return ContinuityHTTPResponse(
+                    status: 206,
+                    contentType: "application/octet-stream",
+                    headers: ["Content-Range": contentRange, "Accept-Ranges": "bytes"],
+                    body: .file(url: url, offset: range.offset, length: length)
+                )
+            }
+            return ContinuityHTTPResponse(
+                status: 200,
+                contentType: "application/octet-stream",
+                headers: ["Accept-Ranges": "bytes"],
+                body: .file(url: url, offset: 0, length: nil)
+            )
+        } catch {
+            return .error(status: 404, message: "file unavailable: \(error)")
+        }
     }
 
     // MARK: - Helpers (same shapes as ContinuityPairingServer's private ones)

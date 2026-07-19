@@ -10,6 +10,8 @@ public struct ContinuityLibraryClient: Sendable {
         /// Host chose Don't Share for this device.
         case declined
         case expired
+        /// The host's free pulls are spent for today (metered pull → 429).
+        case hostLimitReached
         case invalidResponse(status: Int)
     }
 
@@ -71,6 +73,19 @@ public struct ContinuityLibraryClient: Sendable {
         return try ContinuityLibraryManifest.decoded(from: response.body)
     }
 
+    /// Requests a pull manifest for one library game. Metered on the host —
+    /// 429 maps to `.hostLimitReached`.
+    public func requestPull(baseURL: URL, gameId: String, token: String) async throws -> ContinuityManifest {
+        var request = ContinuityRequest(
+            url: baseURL.appendingPathComponent(ContinuityRoutes.libraryPull), method: "POST")
+        request.headers["Content-Type"] = "application/json"
+        request.headers["Authorization"] = "Bearer \(token)"
+        request.body = try JSONEncoder().encode(ContinuityLibraryMessages.PullRequest(gameId: gameId))
+        let response = try await transport.request(request)
+        guard response.status == 200 else { throw Self.mapError(status: response.status) }
+        return try ContinuityManifest.decode(from: response.body)
+    }
+
     public func fetchArt(baseURL: URL, key: String, token: String) async throws -> Data {
         let response = try await transport.request(.authorized(
             url: ContinuityRoutes.libraryArtURL(base: baseURL, key: key), token: token
@@ -91,6 +106,7 @@ public struct ContinuityLibraryClient: Sendable {
         case 401, 404: .sharingUnavailable
         case 403: .declined
         case 410: .expired
+        case 429: .hostLimitReached
         default: .invalidResponse(status: status)
         }
     }

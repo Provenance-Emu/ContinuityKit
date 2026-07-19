@@ -1,5 +1,22 @@
 import Foundation
 
+/// Which file-download route a pull rides: the handoff-session route or the
+/// Nearby Libraries pull route. An enum (not a URL closure) so trailing
+/// `progress:` closures at call sites can never bind to it by accident.
+public enum PullFileRoute: Sendable {
+    /// Session handoff file route (default).
+    case session
+    /// Nearby Libraries granted-pull file route.
+    case library
+
+    func url(base: URL, relativePath: String) -> URL {
+        switch self {
+        case .session: ContinuityRoutes.fileURL(base: base, relativePath: relativePath)
+        case .library: ContinuityRoutes.libraryFileURL(base: base, relativePath: relativePath)
+        }
+    }
+}
+
 /// Device-B side of a handoff: fetches the manifest, diffs it against local
 /// files, and pulls what's missing — small artifacts first, with Range-based
 /// resume of interrupted downloads and SHA-256 verification of every file.
@@ -87,6 +104,7 @@ public actor ContinuityPuller {
         plan: PullPlan,
         baseURL: URL,
         token: String,
+        fileRoute: PullFileRoute = .session,
         progress: (@Sendable (PullProgress) -> Void)? = nil
     ) async throws {
         var completed: [FileDescriptor] = []
@@ -100,7 +118,8 @@ public actor ContinuityPuller {
                 try await pull(
                     descriptor: descriptor,
                     baseURL: baseURL,
-                    token: token
+                    token: token,
+                    fileRoute: fileRoute
                 ) { fileBytes, _ in
                     progress?(PullProgress(
                         currentFile: descriptor,
@@ -140,6 +159,7 @@ public actor ContinuityPuller {
         descriptor: FileDescriptor,
         baseURL: URL,
         token: String,
+        fileRoute: PullFileRoute,
         progress: @escaping @Sendable (Int64, Int64?) -> Void
     ) async throws {
         let destination = try await fileProvider.destinationURL(for: descriptor)
@@ -161,7 +181,7 @@ public actor ContinuityPuller {
         }
 
         let request = ContinuityRequest.authorized(
-            url: ContinuityRoutes.fileURL(base: baseURL, relativePath: descriptor.relativePath),
+            url: fileRoute.url(base: baseURL, relativePath: descriptor.relativePath),
             token: token
         )
         _ = try await transport.download(request, to: partial, resumeOffset: resumeOffset, progress: progress)

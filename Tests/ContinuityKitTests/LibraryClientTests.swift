@@ -51,6 +51,48 @@ final class LibraryClientTests: XCTestCase {
         }
     }
 
+    func testRequestPullReturnsManifest() async throws {
+        let transport = MockTransport()
+        let manifest = ContinuityManifest(
+            sessionId: "pull-1", mintedAt: Date(),
+            sourceDevice: SourceDevice(name: "Host", platform: "tvOS", appVersion: "1.0"),
+            game: GameIdentity(md5Hash: "abc", displayName: "Ikaruga", platform: "dreamcast"))
+        transport.setResponse(
+            method: "POST", path: ContinuityRoutes.libraryPull,
+            response: ContinuityResponse(status: 200, body: try manifest.encoded()))
+
+        let client = ContinuityLibraryClient(transport: transport)
+        let fetched = try await client.requestPull(baseURL: base, gameId: "abc", token: "tok")
+        XCTAssertEqual(fetched.sessionId, "pull-1")
+
+        let request = transport.recordedRequests.last { $0.url.path == ContinuityRoutes.libraryPull }
+        XCTAssertEqual(request?.method, "POST")
+        XCTAssertEqual(request?.headers["Authorization"], "Bearer tok")
+        let body = try JSONDecoder().decode(
+            ContinuityLibraryMessages.PullRequest.self, from: request?.body ?? Data())
+        XCTAssertEqual(body.gameId, "abc")
+    }
+
+    func testRequestPullMaps429ToHostLimit() async throws {
+        let transport = MockTransport()
+        transport.setResponse(
+            method: "POST", path: ContinuityRoutes.libraryPull,
+            response: ContinuityResponse(status: 429))
+        let client = ContinuityLibraryClient(transport: transport)
+        do {
+            _ = try await client.requestPull(baseURL: base, gameId: "abc", token: "tok")
+            XCTFail("expected hostLimitReached")
+        } catch let error as ContinuityLibraryClient.LibraryBrowseError {
+            XCTAssertEqual(error, .hostLimitReached)
+        }
+    }
+
+    func testLibraryFileURLCarriesPathQuery() {
+        let url = ContinuityRoutes.libraryFileURL(base: base, relativePath: "ROMs/a b.cdi")
+        XCTAssertEqual(url.path, ContinuityRoutes.libraryFile)
+        XCTAssertTrue(url.query?.contains("path=") == true)
+    }
+
     func testFetchManifestAndArtCarryBearerToken() async throws {
         let transport = MockTransport()
         let manifest = ContinuityLibraryManifest(peerId: "h", deviceName: "Host", games: [])

@@ -42,6 +42,15 @@ public enum ContinuityLibraryMessages {
         }
     }
 
+    /// Body of POST libraryPull: the manifest `Game.id` the browser wants.
+    public struct PullRequest: Codable, Sendable {
+        public var gameId: String
+
+        public init(gameId: String) {
+            self.gameId = gameId
+        }
+    }
+
     /// Terminal success payload: a LIBRARY-scoped bearer token. Distinct from
     /// SessionTokenResponse on purpose — the two token families must never mix.
     public struct LibraryTokenResponse: Codable, Sendable {

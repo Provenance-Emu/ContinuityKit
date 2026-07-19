@@ -32,6 +32,21 @@ public enum ContinuityRoutes {
     public static let libraryArt = "/api/continuity/library/art"
     public static let artKeyQueryKey = "key"
 
+    // Nearby Libraries (pull). POST pull is the ONLY metered library route —
+    // it burns the host's ContinuityAllowance; file serves manifest-listed
+    // paths under the same LIBRARY token.
+    public static let libraryPull = "/api/continuity/library/pull"
+    public static let libraryFile = "/api/continuity/library/file"
+
+    /// URL for pulling one descriptor of a granted library-pull manifest.
+    public static func libraryFileURL(base: URL, relativePath: String) -> URL {
+        var components = URLComponents(
+            url: base.appendingPathComponent(libraryFile), resolvingAgainstBaseURL: false
+        )
+        components?.queryItems = [URLQueryItem(name: filePathQueryKey, value: relativePath)]
+        return components?.url ?? base
+    }
+
     /// URL for one artwork thumb by its opaque manifest `artKey`.
     public static func libraryArtURL(base: URL, key: String) -> URL {
         var components = URLComponents(

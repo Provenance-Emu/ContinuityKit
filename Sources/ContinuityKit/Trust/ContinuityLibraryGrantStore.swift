@@ -1,9 +1,11 @@
 import Foundation
 
-/// What a host lets one specific peer do with its library. P1 knows
-/// Everything / Denied; "Ask Per Game" arrives in P3 as a third case.
+/// What a host lets one specific peer do with its library. Everything and
+/// Ask-Per-Game both browse silently once trusted — Ask-Per-Game's control
+/// point is the per-pull approval prompt, not re-consenting every browse.
 public enum ContinuityLibraryGrant: String, Codable, Sendable {
     case everything
+    case askPerGame
     case denied
 }
 

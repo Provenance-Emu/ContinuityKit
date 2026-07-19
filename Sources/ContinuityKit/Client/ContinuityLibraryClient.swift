@@ -12,6 +12,8 @@ public struct ContinuityLibraryClient: Sendable {
         case expired
         /// The host's free pulls are spent for today (metered pull → 429).
         case hostLimitReached
+        /// The host declined THIS pull (Ask-Per-Game peer) — browsing stays.
+        case pullDeclined
         case invalidResponse(status: Int)
     }
 
@@ -74,16 +76,29 @@ public struct ContinuityLibraryClient: Sendable {
     }
 
     /// Requests a pull manifest for one library game. Metered on the host —
-    /// 429 maps to `.hostLimitReached`.
+    /// 429 maps to `.hostLimitReached`. Ask-Per-Game hosts answer 202 while
+    /// their owner decides; poll through it like browse auth. A 403 here is
+    /// a per-pull decline (`.pullDeclined`), not a browse revocation.
     public func requestPull(baseURL: URL, gameId: String, token: String) async throws -> ContinuityManifest {
         var request = ContinuityRequest(
             url: baseURL.appendingPathComponent(ContinuityRoutes.libraryPull), method: "POST")
         request.headers["Content-Type"] = "application/json"
         request.headers["Authorization"] = "Bearer \(token)"
         request.body = try JSONEncoder().encode(ContinuityLibraryMessages.PullRequest(gameId: gameId))
-        let response = try await transport.request(request)
-        guard response.status == 200 else { throw Self.mapError(status: response.status) }
-        return try ContinuityManifest.decode(from: response.body)
+        while true {
+            try Task.checkCancellation()
+            let response = try await transport.request(request)
+            switch response.status {
+            case 200:
+                return try ContinuityManifest.decode(from: response.body)
+            case 202:
+                try await Task.sleep(nanoseconds: UInt64(approvalPollInterval * 1_000_000_000))
+            case 403:
+                throw LibraryBrowseError.pullDeclined
+            default:
+                throw Self.mapError(status: response.status)
+            }
+        }
     }
 
     public func fetchArt(baseURL: URL, key: String, token: String) async throws -> Data {

@@ -73,6 +73,50 @@ final class LibraryClientTests: XCTestCase {
         XCTAssertEqual(body.gameId, "abc")
     }
 
+    /// P3: an Ask-Per-Game host answers 202 while its owner decides — the
+    /// client polls through to the eventual manifest.
+    func testRequestPullPollsThroughConsentWindow() async throws {
+        let transport = MockTransport()
+        let manifest = ContinuityManifest(
+            sessionId: "pull-2", mintedAt: Date(),
+            sourceDevice: SourceDevice(name: "Host", platform: "tvOS", appVersion: "1.0"),
+            game: GameIdentity(md5Hash: "abc", displayName: "Ikaruga", platform: "dreamcast"))
+        transport.setResponse(
+            method: "POST", path: ContinuityRoutes.libraryPull,
+            response: ContinuityResponse(status: 202))
+        let approvedBody = try manifest.encoded()
+        // Approve after a few polls, like the host owner tapping Allow.
+        Task {
+            try await Task.sleep(nanoseconds: 50_000_000)
+            transport.setResponse(
+                method: "POST", path: ContinuityRoutes.libraryPull,
+                response: ContinuityResponse(status: 200, body: approvedBody))
+        }
+
+        let client = ContinuityLibraryClient(transport: transport, approvalPollInterval: 0.01)
+        let fetched = try await client.requestPull(baseURL: base, gameId: "abc", token: "tok")
+        XCTAssertEqual(fetched.sessionId, "pull-2")
+        // It actually polled: more than one pull POST was recorded.
+        let polls = transport.recordedRequests.filter { $0.url.path == ContinuityRoutes.libraryPull }
+        XCTAssertGreaterThan(polls.count, 1)
+    }
+
+    /// P3: a per-pull decline is `.pullDeclined`, distinct from the browse
+    /// revocation `.declined`.
+    func testRequestPullMaps403ToPullDeclined() async throws {
+        let transport = MockTransport()
+        transport.setResponse(
+            method: "POST", path: ContinuityRoutes.libraryPull,
+            response: ContinuityResponse(status: 403))
+        let client = ContinuityLibraryClient(transport: transport)
+        do {
+            _ = try await client.requestPull(baseURL: base, gameId: "abc", token: "tok")
+            XCTFail("expected pullDeclined")
+        } catch let error as ContinuityLibraryClient.LibraryBrowseError {
+            XCTAssertEqual(error, .pullDeclined)
+        }
+    }
+
     func testRequestPullMaps429ToHostLimit() async throws {
         let transport = MockTransport()
         transport.setResponse(

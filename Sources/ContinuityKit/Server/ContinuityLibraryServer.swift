@@ -21,7 +21,17 @@ public actor ContinuityLibraryServer {
         var promptFired = false
         var decision: Decision = .undecided
 
-        enum Decision { case undecided, granted, denied }
+        enum Decision { case undecided, granted(ContinuityLibraryGrant), denied }
+    }
+
+    /// One in-flight Ask-Per-Game pull consent, keyed by peerId|gameId. The
+    /// client's 202 poll loop rides this the same way browse auth rides
+    /// PendingAuth; an approval is one-shot (consumed by the poll that sees it).
+    private struct PendingPullApproval {
+        var expiresAt: Date
+        var decision: Decision = .undecided
+
+        enum Decision { case undecided, allowed, denied }
     }
 
     private let identity: ContinuityPeerIdentity
@@ -34,11 +44,15 @@ public actor ContinuityLibraryServer {
     private let sharingEnabled: @Sendable () async -> Bool
     /// nil = this host can't serve pulls (routes answer 404).
     private let pullProvider: (any ContinuityLibraryPullProviding)?
+    /// Consulted per pull for Ask-Per-Game peers. nil = no approval UI is
+    /// wired, so Ask-Per-Game pulls are refused outright (never silently allowed).
+    private let pullApprover: (any ContinuityLibraryPullApproving)?
     /// Metering seam: consulted once per pull request; false → 429. Browse
     /// routes never touch it — browsing is free by design.
     private let pullPolicy: @Sendable () async -> Bool
 
     private var pendingAuths: [String: PendingAuth] = [:]
+    private var pendingPullApprovals: [String: PendingPullApproval] = [:]
     private var validatorsByPeer: [String: BearerTokenValidator] = [:]
     /// Union of every granted pull manifest's descriptors, by relative path —
     /// the file route's allowlist (same manifest-is-the-allowlist rule the
@@ -54,7 +68,8 @@ public actor ContinuityLibraryServer {
         provider: any ContinuityLibraryProviding,
         sharingEnabled: @escaping @Sendable () async -> Bool,
         pullProvider: (any ContinuityLibraryPullProviding)? = nil,
-        pullPolicy: @escaping @Sendable () async -> Bool = { true }
+        pullPolicy: @escaping @Sendable () async -> Bool = { true },
+        pullApprover: (any ContinuityLibraryPullApproving)? = nil
     ) {
         self.identity = identity
         self.trustStore = trustStore
@@ -64,6 +79,7 @@ public actor ContinuityLibraryServer {
         self.sharingEnabled = sharingEnabled
         self.pullProvider = pullProvider
         self.pullPolicy = pullPolicy
+        self.pullApprover = pullApprover
     }
 
     /// Registers the library routes. Call once at server setup; safe to call
@@ -97,6 +113,7 @@ public actor ContinuityLibraryServer {
     public func revokeAllTokens() {
         validatorsByPeer = [:]
         pendingAuths = [:]
+        pendingPullApprovals = [:]
         pullAllowlist = [:]
     }
 
@@ -168,8 +185,9 @@ public actor ContinuityLibraryServer {
         }
         // Silent path: granted AND still trusted. A grant whose trust was
         // revoked re-prompts instead (removal from Trusted Devices must not
-        // leave a silent side door).
-        if grant == .everything, trustedPeer != nil {
+        // leave a silent side door). Ask-Per-Game browses silently too — its
+        // control point is the per-pull prompt, not re-consenting every browse.
+        if grant == .everything || grant == .askPerGame, trustedPeer != nil {
             pendingAuths[body.authId] = nil
             return mintTokenResponse(peerId: body.peerId)
         }
@@ -196,11 +214,12 @@ public actor ContinuityLibraryServer {
             pendingAuths[body.authId] = nil
             await grantStore.setGrant(.denied, forPeerId: pending.peerId)
             return .error(status: 403, message: "library sharing declined for this device")
-        case .granted:
+        case .granted(let grantedLevel):
             pendingAuths[body.authId] = nil
-            await grantStore.setGrant(.everything, forPeerId: pending.peerId)
-            // TOFU: Share Everything also trusts the device (same rail the
-            // continue-request "Always Allow" rides).
+            await grantStore.setGrant(grantedLevel, forPeerId: pending.peerId)
+            // TOFU: any affirmative grant also trusts the device (same rail
+            // the continue-request "Always Allow" rides). Ask-Per-Game needs
+            // it doubly — the pull prompt has to name a recognizable peer.
             if trustedPeer == nil {
                 await trustStore.add(TrustedPeer(
                     id: pending.peerId, name: pending.peerName, publicKey: verifyKey
@@ -212,7 +231,11 @@ public actor ContinuityLibraryServer {
 
     private func resolveApproval(authId: String, decision: ContinuityLibraryBrowseDecision) {
         guard var pending = pendingAuths[authId] else { return }
-        pending.decision = (decision == .shareEverything) ? .granted : .denied
+        switch decision {
+        case .shareEverything: pending.decision = .granted(.everything)
+        case .askPerGame: pending.decision = .granted(.askPerGame)
+        case .dontShare: pending.decision = .denied
+        }
         pendingAuths[authId] = pending
     }
 
@@ -225,26 +248,89 @@ public actor ContinuityLibraryServer {
     private func prune() {
         let now = Date()
         pendingAuths = pendingAuths.filter { $0.value.expiresAt > now }
+        pendingPullApprovals = pendingPullApprovals.filter { $0.value.expiresAt > now }
+    }
+
+    // MARK: - Ask-Per-Game pull consent
+
+    /// nil = approved, proceed with the pull. Anything else is the interim
+    /// answer for this poll: 202 while the owner decides, 403 on deny (or
+    /// when no approval UI is wired — Ask-Per-Game must never silently allow).
+    private func runPullApproval(peerId: String, gameId: String) async -> ContinuityHTTPResponse? {
+        prune()
+        let key = "\(peerId)|\(gameId)"
+        if let pending = pendingPullApprovals[key] {
+            switch pending.decision {
+            case .undecided:
+                return .error(status: 202, message: "waiting for approval on the other device")
+            case .denied:
+                pendingPullApprovals[key] = nil
+                return .error(status: 403, message: "pull declined on the other device")
+            case .allowed:
+                // One approval = one pull manifest; the next pull re-prompts.
+                pendingPullApprovals[key] = nil
+                return nil
+            }
+        }
+        guard let pullApprover else {
+            return .error(status: 403, message: "pull approval unavailable on this host")
+        }
+        // Name the game from the browse manifest (same Game.id derivation the
+        // browser tapped); a stale id falls back to the raw id string.
+        let title = (try? await provider.libraryManifest())?
+            .games.first { $0.id == gameId }?.title ?? gameId
+        let peerName = (await trustStore.peer(withId: peerId))?.name ?? peerId
+        pendingPullApprovals[key] = PendingPullApproval(
+            expiresAt: Date().addingTimeInterval(Self.approvalLifetime)
+        )
+        Task { [pullApprover] in
+            let decision = await Self.withTimeout(Self.approvalLifetime) {
+                await pullApprover.approveLibraryPull(peerName: peerName, gameTitle: title)
+            } ?? ContinuityLibraryPullDecision.deny
+            await self.resolvePullApproval(key: key, peerId: peerId, decision: decision)
+        }
+        return .error(status: 202, message: "waiting for approval on the other device")
+    }
+
+    private func resolvePullApproval(
+        key: String, peerId: String, decision: ContinuityLibraryPullDecision
+    ) async {
+        guard var pending = pendingPullApprovals[key] else { return }
+        switch decision {
+        case .allow:
+            pending.decision = .allowed
+        case .alwaysForDevice:
+            pending.decision = .allowed
+            // Everything-grant: this and every future pull skip the prompt.
+            await grantStore.setGrant(.everything, forPeerId: peerId)
+        case .deny:
+            pending.decision = .denied
+        }
+        pendingPullApprovals[key] = pending
     }
 
     // MARK: - Manifest / art
 
-    /// nil = authorized. Sharing off masks everything as 404; a missing or
-    /// wrong token is 401. Any peer's live library token is acceptable — the
-    /// routes are read-only and grant-scoped at token-mint time.
-    private func authorize(_ request: ContinuityHTTPRequest) async -> ContinuityHTTPResponse? {
+    /// denial == nil means authorized, and peerId names the token's owner —
+    /// the pull route uses it to look up the caller's grant. Sharing off
+    /// masks everything as 404; a missing or wrong token is 401.
+    private func authorize(
+        _ request: ContinuityHTTPRequest
+    ) async -> (peerId: String?, denial: ContinuityHTTPResponse?) {
         guard await sharingEnabled() else {
-            return .error(status: 404, message: "library sharing unavailable")
+            return (nil, .error(status: 404, message: "library sharing unavailable"))
         }
         let header = request.header("Authorization")
-        guard validatorsByPeer.values.contains(where: { $0.validate(authorizationHeader: header) }) else {
-            return .error(status: 401, message: "invalid or missing library token")
+        guard let match = validatorsByPeer.first(where: {
+            $0.value.validate(authorizationHeader: header)
+        }) else {
+            return (nil, .error(status: 401, message: "invalid or missing library token"))
         }
-        return nil
+        return (match.key, nil)
     }
 
     private func handleManifest(_ request: ContinuityHTTPRequest) async -> ContinuityHTTPResponse {
-        if let denial = await authorize(request) { return denial }
+        if let denial = await authorize(request).denial { return denial }
         do {
             let manifest = try await provider.libraryManifest()
             return .json(try manifest.encoded())
@@ -254,7 +340,7 @@ public actor ContinuityLibraryServer {
     }
 
     private func handleArt(_ request: ContinuityHTTPRequest) async -> ContinuityHTTPResponse {
-        if let denial = await authorize(request) { return denial }
+        if let denial = await authorize(request).denial { return denial }
         guard let key = request.query[ContinuityRoutes.artKeyQueryKey], !key.isEmpty else {
             return .error(status: 400, message: "missing ?\(ContinuityRoutes.artKeyQueryKey)=")
         }
@@ -277,15 +363,26 @@ public actor ContinuityLibraryServer {
     // MARK: - Pull / file
 
     private func handlePull(_ request: ContinuityHTTPRequest) async -> ContinuityHTTPResponse {
-        if let denial = await authorize(request) { return denial }
+        let auth = await authorize(request)
+        if let denial = auth.denial { return denial }
+        guard let peerId = auth.peerId else {
+            return .error(status: 401, message: "invalid or missing library token")
+        }
         guard let pullProvider else {
             return .error(status: 404, message: "pulls unavailable on this host")
         }
         guard let body: ContinuityLibraryMessages.PullRequest = Self.decode(request) else {
             return .error(status: 400, message: "invalid pull request")
         }
+        // Ask-Per-Game peers ride a 202 consent window per pull (same poll
+        // rail as browse auth); an interim response short-circuits here.
+        if await grantStore.grant(forPeerId: peerId) == .askPerGame,
+           let interim = await runPullApproval(peerId: peerId, gameId: body.gameId) {
+            return interim
+        }
         // The ONLY metered library route: policy false = the host's free
-        // pulls are spent (client shows the Pro upsell copy).
+        // pulls are spent (client shows the Pro upsell copy). Consulted
+        // AFTER consent — a denied or pending pull must not spend the meter.
         guard await pullPolicy() else {
             return .error(status: 429, message: "host's free pulls used for today")
         }
@@ -303,7 +400,7 @@ public actor ContinuityLibraryServer {
     }
 
     private func handleLibraryFile(_ request: ContinuityHTTPRequest) async -> ContinuityHTTPResponse {
-        if let denial = await authorize(request) { return denial }
+        if let denial = await authorize(request).denial { return denial }
         guard let pullProvider else {
             return .error(status: 404, message: "pulls unavailable on this host")
         }

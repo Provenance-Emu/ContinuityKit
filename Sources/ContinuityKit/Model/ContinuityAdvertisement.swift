@@ -24,6 +24,16 @@ public struct ContinuityAdvertisement: Codable, Hashable, Sendable {
     /// Stable pairing-identity id of the advertiser — lets browsers dedupe
     /// and address the library auth flow before any trust exists.
     public var peerId: String?
+    /// Capability flag string (`b` = browse-capable, `c` = continue-host-
+    /// willing). Present with `sharesLibrary == false` and no game, this IS
+    /// the presence-beacon discriminator.
+    public var capabilities: String?
+    /// Device type for pill glyphs: `ip` iPhone, `pd` iPad, `tv` Apple TV,
+    /// `mc` Mac.
+    public var deviceType: String?
+    /// First 16 hex chars of the salted SHA-256 of the CloudKit userRecordID
+    /// (see ContinuityICloudHash) — same-iCloud device matching.
+    public var icloudHash: String?
 
     public init(
         payloadVersion: Int = ContinuityManifest.currentVersion,
@@ -33,7 +43,10 @@ public struct ContinuityAdvertisement: Codable, Hashable, Sendable {
         saveStateStem: String? = nil,
         urlCandidates: [URL],
         sharesLibrary: Bool = false,
-        peerId: String? = nil
+        peerId: String? = nil,
+        capabilities: String? = nil,
+        deviceType: String? = nil,
+        icloudHash: String? = nil
     ) {
         self.payloadVersion = payloadVersion
         self.sessionId = sessionId
@@ -43,6 +56,9 @@ public struct ContinuityAdvertisement: Codable, Hashable, Sendable {
         self.urlCandidates = urlCandidates
         self.sharesLibrary = sharesLibrary
         self.peerId = peerId
+        self.capabilities = capabilities
+        self.deviceType = deviceType
+        self.icloudHash = icloudHash
     }
 }
 
@@ -86,5 +102,32 @@ extension ContinuityAdvertisement {
             let decoded = try? JSONDecoder().decode(ContinuityAdvertisement.self, from: data)
         else { return nil }
         self = decoded
+    }
+}
+
+// MARK: - Presence beacon
+
+extension ContinuityAdvertisement {
+    /// A routeless presence beacon: "iFly is here" and nothing else. Carries
+    /// capabilities + device type + optional same-iCloud hash — no game, no
+    /// library flag, no URLs, no token. A beacon device serves NO routes;
+    /// receivers must never offer a browse or pull for it.
+    public static func beacon(
+        peerId: String,
+        capabilities: String,
+        deviceType: String,
+        icloudHash: String?
+    ) -> ContinuityAdvertisement {
+        ContinuityAdvertisement(
+            sessionId: "beacon-\(UUID().uuidString)",
+            token: "",
+            game: nil,
+            urlCandidates: [],
+            sharesLibrary: false,
+            peerId: peerId,
+            capabilities: capabilities,
+            deviceType: deviceType,
+            icloudHash: icloudHash
+        )
     }
 }

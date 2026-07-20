@@ -17,6 +17,9 @@ public enum ContinuityTXTRecord {
         static let urlPrefix = "u"
         static let sharesLibrary = "lib"
         static let peerId = "pid"
+        static let capabilities = "cap"
+        static let deviceType = "dt"
+        static let icloudHash = "ic"
     }
 
     private static let maxURLCandidates = 4
@@ -40,6 +43,9 @@ public enum ContinuityTXTRecord {
         if !advertisement.token.isEmpty { txt[Key.token] = advertisement.token }
         if advertisement.sharesLibrary { txt[Key.sharesLibrary] = "1" }
         if let pid = advertisement.peerId { txt[Key.peerId] = pid }
+        if let cap = advertisement.capabilities { txt[Key.capabilities] = cap }
+        if let dt = advertisement.deviceType { txt[Key.deviceType] = dt }
+        if let ic = advertisement.icloudHash { txt[Key.icloudHash] = ic }
         if let stem = advertisement.saveStateStem { txt[Key.stem] = stem }
         for (index, url) in advertisement.urlCandidates.prefix(maxURLCandidates).enumerated() {
             txt["\(Key.urlPrefix)\(index)"] = url.absoluteString
@@ -82,7 +88,10 @@ public enum ContinuityTXTRecord {
             saveStateStem: txt[Key.stem],
             urlCandidates: urls,
             sharesLibrary: txt[Key.sharesLibrary] == "1",
-            peerId: txt[Key.peerId]
+            peerId: txt[Key.peerId],
+            capabilities: txt[Key.capabilities],
+            deviceType: txt[Key.deviceType],
+            icloudHash: txt[Key.icloudHash]
         )
     }
 }

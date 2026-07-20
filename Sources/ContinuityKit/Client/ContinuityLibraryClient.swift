@@ -29,12 +29,14 @@ public struct ContinuityLibraryClient: Sendable {
     /// the host's 202 consent window. Returns the library bearer token.
     public func authenticate(
         baseURL: URL,
-        identity: ContinuityPeerIdentity
+        identity: ContinuityPeerIdentity,
+        icloudHash: String? = nil
     ) async throws -> String {
         let startResponse = try await post(
             url: baseURL.appendingPathComponent(ContinuityRoutes.libraryAuthStart),
             body: ContinuityLibraryMessages.AuthStartRequest(
-                peerId: identity.id, name: identity.name, publicKey: identity.publicKeyData
+                peerId: identity.id, name: identity.name, publicKey: identity.publicKeyData,
+                icloudHash: icloudHash
             )
         )
         guard startResponse.status == 200 else {

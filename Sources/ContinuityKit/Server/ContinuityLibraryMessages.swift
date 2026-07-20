@@ -5,16 +5,20 @@ import Foundation
 public enum ContinuityLibraryMessages {
     /// Carries name + publicKey up front so an undecided host can prompt
     /// ("X wants to browse…") and, on Share Everything, TOFU-trust the peer
-    /// without another round trip.
+    /// without another round trip. `icloudHash` (additive, optional) is the
+    /// sender's ContinuityICloudHash — when it matches the host's own, the
+    /// host may skip the consent prompt (same-iCloud auto-trust).
     public struct AuthStartRequest: Codable, Sendable {
         public var peerId: String
         public var name: String
         public var publicKey: Data
+        public var icloudHash: String?
 
-        public init(peerId: String, name: String, publicKey: Data) {
+        public init(peerId: String, name: String, publicKey: Data, icloudHash: String? = nil) {
             self.peerId = peerId
             self.name = name
             self.publicKey = publicKey
+            self.icloudHash = icloudHash
         }
     }
 

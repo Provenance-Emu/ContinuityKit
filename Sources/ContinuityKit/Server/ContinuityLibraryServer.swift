@@ -17,6 +17,9 @@ public actor ContinuityLibraryServer {
         /// isn't already trusted (a known peerId can never swap keys).
         let presentedKey: Data
         let nonce: Data
+        /// Hash the peer claimed at auth-start. Compared against the host's
+        /// own only AFTER signature verification, in handleAuthComplete.
+        var icloudHash: String?
         var expiresAt: Date
         var promptFired = false
         var decision: Decision = .undecided
@@ -50,6 +53,9 @@ public actor ContinuityLibraryServer {
     /// Metering seam: consulted once per pull request; false → 429. Browse
     /// routes never touch it — browsing is free by design.
     private let pullPolicy: @Sendable () async -> Bool
+    /// The host's own same-iCloud hash (nil = feature off / no account).
+    /// A matching AuthStartRequest.icloudHash skips the consent prompt.
+    private let ownICloudHash: @Sendable () async -> String?
 
     private var pendingAuths: [String: PendingAuth] = [:]
     private var pendingPullApprovals: [String: PendingPullApproval] = [:]
@@ -69,7 +75,8 @@ public actor ContinuityLibraryServer {
         sharingEnabled: @escaping @Sendable () async -> Bool,
         pullProvider: (any ContinuityLibraryPullProviding)? = nil,
         pullPolicy: @escaping @Sendable () async -> Bool = { true },
-        pullApprover: (any ContinuityLibraryPullApproving)? = nil
+        pullApprover: (any ContinuityLibraryPullApproving)? = nil,
+        ownICloudHash: @escaping @Sendable () async -> String? = { nil }
     ) {
         self.identity = identity
         self.trustStore = trustStore
@@ -80,6 +87,7 @@ public actor ContinuityLibraryServer {
         self.pullProvider = pullProvider
         self.pullPolicy = pullPolicy
         self.pullApprover = pullApprover
+        self.ownICloudHash = ownICloudHash
     }
 
     /// Registers the library routes. Call once at server setup; safe to call
@@ -142,6 +150,7 @@ public actor ContinuityLibraryServer {
             peerName: body.name,
             presentedKey: body.publicKey,
             nonce: nonce,
+            icloudHash: body.icloudHash,
             expiresAt: Date().addingTimeInterval(Self.authLifetime)
         )
         return Self.encode(ContinuityLibraryMessages.AuthStartResponse(
@@ -190,6 +199,24 @@ public actor ContinuityLibraryServer {
         if grant == .everything || grant == .askPerGame, trustedPeer != nil {
             pendingAuths[body.authId] = nil
             return mintTokenResponse(peerId: body.peerId)
+        }
+
+        // Same-iCloud auto-trust (2026-07-19 spec): a peer that presented our
+        // own salted iCloud hash is another device on this account — skip the
+        // consent prompt, grant everything, TOFU-trust. Runs strictly AFTER
+        // signature verification (key binding is real) and never overrides a
+        // .denied grant (checked above and at auth-start). Both optional
+        // bindings must succeed, so a nil own-hash never matches a nil claim.
+        if let claimed = pending.icloudHash, !claimed.isEmpty,
+           let mine = await ownICloudHash(), claimed == mine {
+            pendingAuths[body.authId] = nil
+            await grantStore.setGrant(.everything, forPeerId: pending.peerId)
+            if trustedPeer == nil {
+                await trustStore.add(TrustedPeer(
+                    id: pending.peerId, name: pending.peerName, publicKey: verifyKey
+                ))
+            }
+            return mintTokenResponse(peerId: pending.peerId)
         }
 
         // Consent round. Fire the prompt exactly once, then 202 until decided.

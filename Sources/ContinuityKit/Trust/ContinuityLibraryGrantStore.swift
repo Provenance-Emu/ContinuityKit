@@ -18,6 +18,11 @@ public protocol ContinuityLibraryGrantStore: Sendable {
     func setGrant(_ grant: ContinuityLibraryGrant, forPeerId id: String) async
     func removeGrant(forPeerId id: String) async
     func removeAll() async
+    /// Every remembered decision, peerId -> grant. Needed so the owner can SEE
+    /// and undo them: a "Don't Share" is persisted forever, and without a way
+    /// to list it a single mis-tap kills the feature with no recovery short of
+    /// reinstalling the app.
+    func allGrants() async -> [String: ContinuityLibraryGrant]
 }
 
 /// JSON-file grant store, mirroring FileTrustStore (plain storage is fine —
@@ -48,6 +53,10 @@ public actor FileLibraryGrantStore: ContinuityLibraryGrantStore {
 
     public func removeAll() {
         save([:])
+    }
+
+    public func allGrants() -> [String: ContinuityLibraryGrant] {
+        load()
     }
 
     private func load() -> [String: ContinuityLibraryGrant] {

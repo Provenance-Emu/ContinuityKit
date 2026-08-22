@@ -13,6 +13,12 @@ public struct URLSessionContinuityTransport: ContinuityTransport {
             config.timeoutIntervalForRequest = 15
             config.timeoutIntervalForResource = 3600
             config.waitsForConnectivity = false
+            // NearbyArtMirror (app-side) fans out up to 6 concurrent thumb
+            // fetches to the same host; HTTP/1.1's per-host default already
+            // matches, but pin it explicitly so a platform default change
+            // can't silently serialize the mirror back down. Keep in sync
+            // with `NearbyArtMirror.concurrency` in the iFly app target.
+            config.httpMaximumConnectionsPerHost = 6
             self.session = URLSession(configuration: config)
         }
     }

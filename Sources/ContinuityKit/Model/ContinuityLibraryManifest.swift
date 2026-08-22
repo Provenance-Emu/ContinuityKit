@@ -12,6 +12,12 @@ public struct ContinuityLibraryManifest: Codable, Sendable, Equatable {
     public var peerId: String
     public var deviceName: String
     public var games: [Game]
+    /// Content hash of `games` (see `computeVersion`), stamped by the server
+    /// on the way out so a client can cache it as an ETag for the next
+    /// conditional GET. Optional and last so an older peer's manifest (pre
+    /// this field) still decodes — nil means "peer didn't send one," not
+    /// "the catalog is empty."
+    public var catalogVersion: String?
 
     public struct Game: Codable, Sendable, Equatable, Identifiable {
         public var title: String
@@ -65,11 +71,13 @@ public struct ContinuityLibraryManifest: Codable, Sendable, Equatable {
     }
 
     public init(version: Int = ContinuityLibraryManifest.currentVersion,
-                peerId: String, deviceName: String, games: [Game]) {
+                peerId: String, deviceName: String, games: [Game],
+                catalogVersion: String? = nil) {
         self.version = version
         self.peerId = peerId
         self.deviceName = deviceName
         self.games = games
+        self.catalogVersion = catalogVersion
     }
 
     public func encoded() throws -> Data {
@@ -78,5 +86,23 @@ public struct ContinuityLibraryManifest: Codable, Sendable, Equatable {
 
     public static func decoded(from data: Data) throws -> ContinuityLibraryManifest {
         try JSONDecoder().decode(ContinuityLibraryManifest.self, from: data)
+    }
+
+    /// Stable content hash over `games`, independent of array order (sorted
+    /// by `id` first) so shuffling the host's underlying query doesn't
+    /// spuriously invalidate a client's cache. Changes whenever any field a
+    /// browsing peer can observe changes (size, favorite, play stats, art).
+    /// `"v1-"` prefix lets a future revision of the hash shape coexist with
+    /// this one without ambiguity.
+    public static func computeVersion(games: [Game]) -> String {
+        let sorted = games.sorted { $0.id < $1.id }
+        var input = ""
+        for game in sorted {
+            input += "\(game.id)|\(game.sizeBytes)|\(game.favorite.map(String.init) ?? "")|"
+            input += "\(game.lastPlayedDate?.timeIntervalSince1970 ?? 0)|\(game.playCount ?? 0)|"
+            input += "\(game.addedDate?.timeIntervalSince1970 ?? 0)|\(game.artKey ?? "")\n"
+        }
+        let hash = ContinuityHash.sha256Hex(of: Data(input.utf8))
+        return "v1-\(hash)"
     }
 }

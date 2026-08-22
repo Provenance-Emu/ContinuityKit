@@ -73,6 +73,36 @@ final class LibraryServerRoutesTests: XCTestCase {
         XCTAssertEqual(manifest.games.first?.title, "Ikaruga")
     }
 
+    /// Conditional GET: a matching If-None-Match gets 304 with no body; a
+    /// mismatched or absent one gets 200 with the manifest AND an ETag
+    /// header carrying the same version — so an older peer that never sends
+    /// the header just always sees 200 (wire-compatible).
+    func testManifestConditionalGetReturns304OnMatchAnd200WithETagOtherwise() async throws {
+        let (registrar, token, _, server) = try await grantedSetup()
+        defer { _ = server }  // keep the weakly-held route target alive
+        let authHeader = ["Authorization": "Bearer \(token)"]
+
+        let first = await registrar.invoke(
+            method: "GET", path: ContinuityRoutes.libraryManifest, headers: authHeader)
+        XCTAssertEqual(first?.status, 200)
+        let etag = try XCTUnwrap(first?.headers["ETag"])
+        guard case .data(let data)? = first?.body else { XCTFail("no body"); return }
+        let manifest = try ContinuityLibraryManifest.decoded(from: data)
+        XCTAssertEqual(manifest.catalogVersion, etag)
+
+        let matching = await registrar.invoke(
+            method: "GET", path: ContinuityRoutes.libraryManifest,
+            headers: authHeader.merging(["If-None-Match": etag]) { _, new in new })
+        XCTAssertEqual(matching?.status, 304)
+        if case .empty = matching?.body {} else { XCTFail("expected empty 304 body") }
+
+        let mismatched = await registrar.invoke(
+            method: "GET", path: ContinuityRoutes.libraryManifest,
+            headers: authHeader.merging(["If-None-Match": "stale-tag"]) { _, new in new })
+        XCTAssertEqual(mismatched?.status, 200)
+        XCTAssertEqual(mismatched?.headers["ETag"], etag)
+    }
+
     func testArtServesFileAndBlocksTraversal() async throws {
         let (registrar, token, _, server) = try await grantedSetup()
         defer { _ = server }  // keep the weakly-held route target alive

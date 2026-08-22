@@ -359,8 +359,18 @@ public actor ContinuityLibraryServer {
     private func handleManifest(_ request: ContinuityHTTPRequest) async -> ContinuityHTTPResponse {
         if let denial = await authorize(request).denial { return denial }
         do {
-            let manifest = try await provider.libraryManifest()
-            return .json(try manifest.encoded())
+            var manifest = try await provider.libraryManifest()
+            let version = manifest.catalogVersion
+                ?? ContinuityLibraryManifest.computeVersion(games: manifest.games)
+            // Older peers never send If-None-Match — they just get 200 every
+            // time, which is correct (they don't know how to cache anyway).
+            if request.header("If-None-Match") == version {
+                return ContinuityHTTPResponse(status: 304, headers: [:], body: .empty)
+            }
+            manifest.catalogVersion = version
+            return ContinuityHTTPResponse(
+                status: 200, contentType: "application/json", headers: ["ETag": version],
+                body: .data(try manifest.encoded()))
         } catch {
             return .error(status: 500, message: "library manifest build failed: \(error)")
         }

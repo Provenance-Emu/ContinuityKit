@@ -69,12 +69,52 @@ public struct ContinuityLibraryClient: Sendable {
         }
     }
 
+    /// Result of a conditional manifest fetch: `.notModified` means the
+    /// caller's cached copy (keyed by the ETag it sent as `If-None-Match`)
+    /// is still current and it should keep using it.
+    public enum ManifestFetch: Sendable {
+        case notModified
+        case manifest(ContinuityLibraryManifest)
+    }
+
+    /// Unconditional fetch — always returns a manifest. Kept for callers that
+    /// don't cache; a thin wrapper over the conditional variant below.
     public func fetchManifest(baseURL: URL, token: String) async throws -> ContinuityLibraryManifest {
-        let response = try await transport.request(.authorized(
+        // No If-None-Match is sent, so the host has nothing to compare
+        // against and can never legally answer 304 here — .notModified is
+        // unreachable in practice. Force-unwrap rather than silently
+        // swallowing a host that misbehaves.
+        switch try await fetchManifest(baseURL: baseURL, token: token, ifNoneMatch: nil) {
+        case .manifest(let manifest):
+            return manifest
+        case .notModified:
+            throw LibraryBrowseError.invalidResponse(status: 304)
+        }
+    }
+
+    /// Conditional fetch: pass the ETag from a previous response as
+    /// `ifNoneMatch` and the host returns 304 (no body) when nothing
+    /// changed, or 200 + a fresh manifest (with `catalogVersion` stamped)
+    /// otherwise. A host that predates this feature just ignores the header
+    /// and always answers 200 — wire-compatible either way.
+    public func fetchManifest(
+        baseURL: URL, token: String, ifNoneMatch: String?
+    ) async throws -> ManifestFetch {
+        var request = ContinuityRequest.authorized(
             url: baseURL.appendingPathComponent(ContinuityRoutes.libraryManifest), token: token
-        ))
-        guard response.status == 200 else { throw Self.mapError(status: response.status) }
-        return try ContinuityLibraryManifest.decoded(from: response.body)
+        )
+        if let ifNoneMatch {
+            request.headers["If-None-Match"] = ifNoneMatch
+        }
+        let response = try await transport.request(request)
+        switch response.status {
+        case 304:
+            return .notModified
+        case 200:
+            return .manifest(try ContinuityLibraryManifest.decoded(from: response.body))
+        default:
+            throw Self.mapError(status: response.status)
+        }
     }
 
     /// Requests a pull manifest for one library game. Metered on the host —

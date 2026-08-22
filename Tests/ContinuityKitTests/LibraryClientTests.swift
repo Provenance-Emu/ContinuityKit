@@ -137,6 +137,36 @@ final class LibraryClientTests: XCTestCase {
         XCTAssertTrue(url.query?.contains("path=") == true)
     }
 
+    func testFetchManifestConditionalMapsMatchTo304AndSendsIfNoneMatch() async throws {
+        let transport = MockTransport()
+        transport.setResponse(
+            method: "GET", path: ContinuityRoutes.libraryManifest,
+            response: ContinuityResponse(status: 304))
+
+        let client = ContinuityLibraryClient(transport: transport)
+        let result = try await client.fetchManifest(
+            baseURL: base, token: "tok", ifNoneMatch: "v1-abc123")
+        guard case .notModified = result else { XCTFail("expected .notModified"); return }
+
+        let request = try XCTUnwrap(
+            transport.recordedRequests.last { $0.url.path == ContinuityRoutes.libraryManifest })
+        XCTAssertEqual(request.headers["If-None-Match"], "v1-abc123")
+    }
+
+    func testFetchManifestConditionalMapsFreshManifestTo200() async throws {
+        let transport = MockTransport()
+        let manifest = ContinuityLibraryManifest(
+            peerId: "h", deviceName: "Host", games: [], catalogVersion: "v1-fresh")
+        transport.setResponse(
+            method: "GET", path: ContinuityRoutes.libraryManifest,
+            response: ContinuityResponse(status: 200, body: try manifest.encoded()))
+
+        let client = ContinuityLibraryClient(transport: transport)
+        let result = try await client.fetchManifest(baseURL: base, token: "tok", ifNoneMatch: nil)
+        guard case .manifest(let fetched) = result else { XCTFail("expected .manifest"); return }
+        XCTAssertEqual(fetched, manifest)
+    }
+
     func testFetchManifestAndArtCarryBearerToken() async throws {
         let transport = MockTransport()
         let manifest = ContinuityLibraryManifest(peerId: "h", deviceName: "Host", games: [])

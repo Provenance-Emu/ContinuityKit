@@ -102,6 +102,9 @@ public actor ContinuityLibraryServer {
         registrar.register(method: "POST", path: ContinuityRoutes.libraryAuthComplete) { [weak self] request in
             await self?.handleAuthComplete(request) ?? .error(status: 404, message: "unavailable")
         }
+        registrar.register(method: "GET", path: ContinuityRoutes.libraryFind) { [weak self] request in
+            await self?.handleManifest(request, find: true) ?? .error(status: 404, message: "unavailable")
+        }
         registrar.register(method: "GET", path: ContinuityRoutes.libraryManifest) { [weak self] request in
             await self?.handleManifest(request) ?? .error(status: 404, message: "unavailable")
         }
@@ -356,10 +359,17 @@ public actor ContinuityLibraryServer {
         return (match.key, nil)
     }
 
-    private func handleManifest(_ request: ContinuityHTTPRequest) async -> ContinuityHTTPResponse {
+    private func handleManifest(_ request: ContinuityHTTPRequest, find: Bool = false) async -> ContinuityHTTPResponse {
         if let denial = await authorize(request).denial { return denial }
         do {
             var manifest = try await provider.libraryManifest()
+            if find {
+                guard let query = LibraryFindQuery(request.query) else { return .error(status: 400, message: "invalid lookup") }
+                manifest.games = manifest.games.filter {
+                    query.matches(system: $0.platform, md5: $0.md5, title: $0.title)
+                }
+                manifest.catalogVersion = nil
+            }
             let version = manifest.catalogVersion
                 ?? ContinuityLibraryManifest.computeVersion(games: manifest.games)
             // Older peers never send If-None-Match — they just get 200 every

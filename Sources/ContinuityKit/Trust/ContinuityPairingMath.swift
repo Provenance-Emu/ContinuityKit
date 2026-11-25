@@ -10,7 +10,7 @@ import Foundation
 /// approved, proven present by the on-screen code"; it does NOT add transport
 /// confidentiality. Trusted-peer auth proves possession of the paired private
 /// key via a single-use server nonce (no replay).
-public enum ContinuityPairingMath {
+@frozen public enum ContinuityPairingMath {
     /// 6-digit, zero-padded, uniformly random display code.
     public static func makePairingCode() -> String {
         String(format: "%06d", Int.random(in: 0...999_999))

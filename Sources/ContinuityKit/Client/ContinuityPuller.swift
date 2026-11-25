@@ -3,7 +3,7 @@ import Foundation
 /// Which file-download route a pull rides: the handoff-session route or the
 /// Nearby Libraries pull route. An enum (not a URL closure) so trailing
 /// `progress:` closures at call sites can never bind to it by accident.
-public enum PullFileRoute: Sendable {
+@frozen public enum PullFileRoute: Sendable {
     /// Session handoff file route (default).
     case session
     /// Nearby Libraries granted-pull file route.

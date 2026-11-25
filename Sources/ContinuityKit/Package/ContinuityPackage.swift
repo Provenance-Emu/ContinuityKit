@@ -6,7 +6,7 @@
 /// compressed and re-deflating gigabytes wastes time for nothing. Accessory
 /// files (save states, VMU cards, texture packs, GDI indexes, the manifest)
 /// get deflate.
-public enum ContinuityPackage {
+@frozen public enum ContinuityPackage {
     public static let fileExtension = "iflypkg"
     /// Exported UTI — must match the app's UTExportedTypeDeclarations.
     public static let typeIdentifier = "com.joemattiello.ifly.package"

@@ -1,8 +1,8 @@
 /// Pure decision table for "the server died / the pull broke — what now?".
 /// No I/O, fully deterministic, exhaustively unit-tested.
-public enum ContinuityFallbackMachine {
+@frozen public enum ContinuityFallbackMachine {
     /// Where in the flow the failure happened.
-    public enum Stage: Sendable, Equatable, CaseIterable {
+    @frozen public enum Stage: Sendable, Equatable, CaseIterable {
         case fetchingManifest
         case minting
         case pulling
@@ -10,7 +10,7 @@ public enum ContinuityFallbackMachine {
     }
 
     /// What the receiving device can do on its own.
-    public enum LocalCapability: Sendable, Equatable {
+    @frozen public enum LocalCapability: Sendable, Equatable {
         /// Game (all files needed to boot) is available locally.
         case gameAvailable(hasLocalSaveState: Bool)
         case gameMissing

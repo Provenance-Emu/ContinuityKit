@@ -153,7 +153,7 @@ final class PackageTests: XCTestCase {
     func testGameFilesStoredAccessoriesDeflated() {
         let gameFile = FileDescriptor(kind: .gameFile, relativePath: "ROMs/ct.chd", sha256: "a", size: 1)
         let state = FileDescriptor(kind: .saveState, relativePath: "Flycast/ct.state", sha256: "b", size: 1)
-        XCTAssertEqual(ContinuityPackageWriter.compressionMethod(for: gameFile), .none)
-        XCTAssertEqual(ContinuityPackageWriter.compressionMethod(for: state), .deflate)
+        XCTAssertFalse(ContinuityPackageWriter.compresses(gameFile))
+        XCTAssertTrue(ContinuityPackageWriter.compresses(state))
     }
 }

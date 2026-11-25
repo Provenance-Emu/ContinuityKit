@@ -1,6 +1,6 @@
 /// How a local library entry was matched to a remote identity, strongest
 /// first.
-public enum IdentityMatchKey: String, Sendable, Codable {
+@frozen public enum IdentityMatchKey: String, Sendable, Codable {
     case flycastGameId
     case md5Hash
     case serial

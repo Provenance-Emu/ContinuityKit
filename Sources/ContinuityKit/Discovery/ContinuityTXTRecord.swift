@@ -3,7 +3,7 @@ import Foundation
 /// Bonjour TXT codec for ContinuityAdvertisement. Keys are terse (TXT strings
 /// cap at 255 bytes each); base URLs ride along explicitly (u0, u1, …) so the
 /// browser never has to resolve endpoints itself.
-public enum ContinuityTXTRecord {
+@frozen public enum ContinuityTXTRecord {
     private enum Key {
         static let version = "v"
         static let sessionId = "sid"

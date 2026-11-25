@@ -2,7 +2,7 @@ import Foundation
 
 /// Wire types for the library browse-auth routes. Same shape family as
 /// ContinuityPairingMessages (Data rides as base64 in JSON).
-public enum ContinuityLibraryMessages {
+@frozen public enum ContinuityLibraryMessages {
     /// Carries name + publicKey up front so an undecided host can prompt
     /// ("X wants to browse…") and, on Share Everything, TOFU-trust the peer
     /// without another round trip. `icloudHash` (additive, optional) is the

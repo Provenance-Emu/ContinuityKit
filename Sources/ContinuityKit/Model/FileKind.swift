@@ -1,4 +1,4 @@
-public enum FileKind: String, Codable, Hashable, Sendable, CaseIterable {
+@frozen public enum FileKind: String, Codable, Hashable, Sendable, CaseIterable {
     case gameFile
     case bios
     case saveState

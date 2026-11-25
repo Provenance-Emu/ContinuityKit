@@ -1,5 +1,5 @@
 /// Owner's answer to one pull request from an Ask-Per-Game peer.
-public enum ContinuityLibraryPullDecision: Sendable {
+@frozen public enum ContinuityLibraryPullDecision: Sendable {
     /// This pull only — the next pull prompts again.
     case allow
     /// Upgrade the peer's grant to Everything; no further prompts.

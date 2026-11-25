@@ -1,7 +1,7 @@
 import Foundation
 
 /// The serving user's answer to a code-less continue request.
-public enum ContinuityContinueDecision: Sendable {
+@frozen public enum ContinuityContinueDecision: Sendable {
     /// Hand out the session token this once; the peer stays untrusted.
     case allowOnce
     /// Hand out the token AND remember the peer (trust-on-first-use with the

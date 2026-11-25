@@ -1,5 +1,5 @@
 import Foundation
-import ZIPFoundation
+internal import ZIPFoundation
 
 /// Writes a `.iflypkg` archive from a manifest: every descriptor the file
 /// provider can serve, streamed from disk (never buffered whole).
@@ -50,7 +50,12 @@ public struct ContinuityPackageWriter: Sendable {
 
     /// Disc images are already compressed (CHD, zip romsets) or huge raw data
     /// not worth the CPU on-device; everything else deflates well.
-    public static func compressionMethod(for descriptor: FileDescriptor) -> CompressionMethod {
-        descriptor.kind == .gameFile ? .none : .deflate
+    public static func compresses(_ descriptor: FileDescriptor) -> Bool {
+        descriptor.kind != .gameFile
+    }
+
+    // Not public: it names a ZIPFoundation type, which stays out of the module's interface.
+    static func compressionMethod(for descriptor: FileDescriptor) -> CompressionMethod {
+        compresses(descriptor) ? .deflate : .none
     }
 }

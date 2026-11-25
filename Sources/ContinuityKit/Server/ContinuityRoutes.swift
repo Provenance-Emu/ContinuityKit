@@ -1,7 +1,7 @@
 import Foundation
 
 /// Route paths for the continuity API, shared by server and client.
-public enum ContinuityRoutes {
+@frozen public enum ContinuityRoutes {
     public static let manifest = "/api/continuity/manifest"
     public static let mint = "/api/continuity/mint"
     public static let file = "/api/continuity/file"

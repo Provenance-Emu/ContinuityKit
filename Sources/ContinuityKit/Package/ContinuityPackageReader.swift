@@ -1,5 +1,5 @@
 import Foundation
-import ZIPFoundation
+internal import ZIPFoundation
 
 /// Reads/extracts a `.iflypkg`. Only manifest-listed paths are extracted (the
 /// manifest is the allowlist — a crafted archive can't traverse outside the

@@ -11,7 +11,7 @@ import Foundation
 /// same-iCloud auth shortcut. The CloudKit-mediated key exchange that closes
 /// this is explicitly deferred; the shortcut still requires a valid Ed25519
 /// signature and never overrides a `.denied` grant.
-public enum ContinuityICloudHash {
+@frozen public enum ContinuityICloudHash {
     /// Fixed app-wide salt. NEVER change this — a change silently un-pairs
     /// every same-iCloud fleet in the field.
     private static let salt = "iFly-continuity-ic-v1|"

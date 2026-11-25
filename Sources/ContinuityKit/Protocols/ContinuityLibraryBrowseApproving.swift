@@ -1,6 +1,6 @@
 /// Host-side hook for the first-browse consent prompt ("X wants to browse
 /// your game library").
-public enum ContinuityLibraryBrowseDecision: Sendable {
+@frozen public enum ContinuityLibraryBrowseDecision: Sendable {
     case shareEverything
     /// Browse freely, but every pull raises an owner-side approval prompt.
     case askPerGame

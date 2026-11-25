@@ -1,6 +1,6 @@
 import Foundation
 
-public enum ContinuityError: Error, Equatable, Sendable {
+@frozen public enum ContinuityError: Error, Equatable, Sendable {
     case serverUnreachable(detail: String?)
     case tokenRejected
     case manifestVersionUnsupported(found: Int)

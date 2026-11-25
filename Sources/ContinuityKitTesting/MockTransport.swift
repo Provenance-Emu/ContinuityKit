@@ -5,7 +5,7 @@ import Foundation
 /// payloads, and mid-download failure injection (fail-after-N-bytes fires
 /// once, then the path succeeds — modeling a flaky server that recovers).
 public final class MockTransport: ContinuityTransport, @unchecked Sendable {
-    public enum ScriptedDownload {
+    @frozen public enum ScriptedDownload {
         case success(Data)
         case failAfter(bytes: Int, data: Data)
         case unreachable

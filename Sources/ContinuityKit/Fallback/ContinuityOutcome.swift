@@ -1,7 +1,7 @@
 /// What the receiving device should do after a pull ends — successfully or
 /// not. Produced by ContinuityFallbackMachine; the app maps each case to a
 /// boot action and user messaging.
-public enum ContinuityOutcome: Sendable, Equatable {
+@frozen public enum ContinuityOutcome: Sendable, Equatable {
     /// Everything required arrived (or was already local): boot the game and
     /// load the pulled save state.
     case proceedWithPulledState

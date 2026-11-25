@@ -36,7 +36,7 @@ public struct ContinuityHTTPResponse: Sendable {
     /// Bodies are either in-memory (JSON) or a file reference the host server
     /// streams from disk — game files run to gigabytes and must never be
     /// loaded into memory.
-    public enum Body: Sendable {
+    @frozen public enum Body: Sendable {
         case empty
         case data(Data)
         case file(url: URL, offset: Int64, length: Int64?)

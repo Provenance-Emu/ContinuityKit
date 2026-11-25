@@ -7,7 +7,7 @@ import Foundation
 ///   code shown on the serving device, and completion polls through the
 ///   server's 202 "waiting for approval" window.
 public struct ContinuityPairingClient: Sendable {
-    public enum PairingError: Error, Equatable {
+    @frozen public enum PairingError: Error, Equatable {
         case declined
         case expired
         case wrongCode

@@ -2,7 +2,7 @@ import Foundation
 
 /// Wire types for the pairing + trusted-peer auth routes. `Data` fields ride
 /// as base64 strings (Codable's JSON default) — same convention both ends.
-public enum ContinuityPairingMessages {
+@frozen public enum ContinuityPairingMessages {
     public struct PairStartRequest: Codable, Sendable {
         public var peerId: String
         public var name: String

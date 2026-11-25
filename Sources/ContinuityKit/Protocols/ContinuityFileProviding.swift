@@ -1,7 +1,7 @@
 import Foundation
 
 /// Client-side presence check result for a manifest entry.
-public enum LocalFileStatus: Sendable, Equatable {
+@frozen public enum LocalFileStatus: Sendable, Equatable {
     /// Not on disk — must be pulled.
     case missing
     /// On disk with a matching checksum — skip.

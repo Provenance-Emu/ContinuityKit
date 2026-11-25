@@ -4,7 +4,7 @@ import Foundation
 /// polling through the host's consent window), manifest fetch, and art-thumb
 /// fetch. Mirrors ContinuityPairingClient's shapes.
 public struct ContinuityLibraryClient: Sendable {
-    public enum LibraryBrowseError: Error, Equatable {
+    @frozen public enum LibraryBrowseError: Error, Equatable {
         /// Host isn't sharing (or predates the routes) — hide the peer.
         case sharingUnavailable
         /// Host chose Don't Share for this device.
@@ -72,7 +72,7 @@ public struct ContinuityLibraryClient: Sendable {
     /// Result of a conditional manifest fetch: `.notModified` means the
     /// caller's cached copy (keyed by the ETag it sent as `If-None-Match`)
     /// is still current and it should keep using it.
-    public enum ManifestFetch: Sendable {
+    @frozen public enum ManifestFetch: Sendable {
         case notModified
         case manifest(ContinuityLibraryManifest)
     }

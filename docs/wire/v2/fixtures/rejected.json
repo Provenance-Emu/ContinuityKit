@@ -1,0 +1,76 @@
+{
+  "unsupportedMajor": {
+    "txt": [
+      "v=1",
+      "app=ifly",
+      "pid=24f6ed6acbfe1009c030d7ca567c33ca4830911498236b5561a6c82abec5de28"
+    ],
+    "result": "ignore"
+  },
+  "duplicateTXT": {
+    "txt": [
+      "v=2",
+      "app=ifly",
+      "app=icube",
+      "pid=24f6ed6acbfe1009c030d7ca567c33ca4830911498236b5561a6c82abec5de28"
+    ],
+    "result": "reject"
+  },
+  "unsafeManifest": {
+    "body": {
+      "key": "demo-disc",
+      "identity": {
+        "system": "com.provenance.dreamcast",
+        "title": "Example Disc – Test",
+        "sizeBytes": 9,
+        "serial": "DEMO-001",
+        "discNumber": 0,
+        "revision": 1
+      },
+      "files": [
+        {
+          "path": "../demo.gdi",
+          "kind": "game",
+          "sizeBytes": 4,
+          "sha256": "2a97516c354b68848cdbd8f54a226a0a55b21ed138e207ad6c5cbb9c00aa5aea",
+          "required": true
+        }
+      ]
+    },
+    "result": "reject"
+  },
+  "duplicateQuery": {
+    "request": {
+      "method": "GET",
+      "path": "/continuity/v2/manifest?key=demo-disc&key=another",
+      "headers": {
+        "Authorization": "Bearer synthetic-bearer-fixture"
+      }
+    },
+    "response": {
+      "status": 400,
+      "body": {
+        "error": {
+          "code": "invalidRequest"
+        }
+      }
+    }
+  },
+  "unlistedFile": {
+    "request": {
+      "method": "GET",
+      "path": "/continuity/v2/file?key=demo-disc&path=another.bin",
+      "headers": {
+        "Authorization": "Bearer synthetic-bearer-fixture"
+      }
+    },
+    "response": {
+      "status": 404,
+      "body": {
+        "error": {
+          "code": "unavailable"
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,8 @@
+v=2
+app=icube
+pid=03396219237f75a64f12aeb7f39723abf400b160c364980a765dac24aeba2464
+dt=tv
+cap=l
+sys=gamecube,wii
+cv=cafebabe
+u0=http://192.0.2.15:43100

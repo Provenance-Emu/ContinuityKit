@@ -73,6 +73,27 @@ final class LibraryServerRoutesTests: XCTestCase {
         XCTAssertEqual(manifest.games.first?.title, "Ikaruga")
     }
 
+    func testFindRequiresBrowseTokenAndFiltersTheManifest() async throws {
+        let (registrar, token, artURL, server) = try await grantedSetup()
+        defer {
+            _ = server
+            try? FileManager.default.removeItem(at: artURL)
+        }
+        let query = ["system": "com.provenance.dreamcast", "names": "ikaruga"]
+        let unauthorized = await registrar.invoke(method: "GET", path: ContinuityRoutes.libraryFind, query: query)
+        XCTAssertEqual(unauthorized?.status, 401)
+        let headers = ["Authorization": "Bearer \(token)"]
+        let match = await registrar.invoke(method: "GET", path: ContinuityRoutes.libraryFind, query: query, headers: headers)
+        guard case .data(let matchData)? = match?.body else { return XCTFail("Missing lookup response") }
+        XCTAssertEqual(try ContinuityLibraryManifest.decoded(from: matchData).games.map(\.title), ["Ikaruga"])
+        let miss = await registrar.invoke(
+            method: "GET", path: ContinuityRoutes.libraryFind,
+            query: ["system": "com.provenance.naomi", "names": "ikaruga"], headers: headers
+        )
+        guard case .data(let missData)? = miss?.body else { return XCTFail("Missing empty lookup response") }
+        XCTAssertTrue(try ContinuityLibraryManifest.decoded(from: missData).games.isEmpty)
+    }
+
     /// Conditional GET: a matching If-None-Match gets 304 with no body; a
     /// mismatched or absent one gets 200 with the manifest AND an ETag
     /// header carrying the same version — so an older peer that never sends

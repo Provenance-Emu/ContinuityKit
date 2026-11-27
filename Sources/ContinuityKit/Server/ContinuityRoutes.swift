@@ -29,6 +29,7 @@ import Foundation
     public static let libraryAuthStart = "/api/continuity/library/auth/start"
     public static let libraryAuthComplete = "/api/continuity/library/auth/complete"
     public static let libraryManifest = "/api/continuity/library/manifest"
+    public static let libraryFind = "/api/continuity/library/find"
     public static let libraryArt = "/api/continuity/library/art"
     public static let artKeyQueryKey = "key"
 

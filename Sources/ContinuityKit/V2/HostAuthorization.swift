@@ -54,6 +54,7 @@ public actor ContinuityV2HostAuthorization {
 
     private struct Exchange {
         let client: ContinuityV2AuthPeer
+        let source: String
         let transcript: ContinuityV2AuthTranscript
         let requested: Set<String>
         let saveFormats: [String]
@@ -86,14 +87,17 @@ public actor ContinuityV2HostAuthorization {
         self.now = now
     }
 
+    /// Source is the transport-observed, normalized remote IP address without its port.
     public func start(
+        source: String,
         client: ContinuityV2AuthPeer,
         scopes: [String],
         saveFormats: [String] = []
     ) throws -> Challenge {
         let time = now()
         prune(at: time)
-        guard exchanges.count < 32 else { throw Failure.capacityReached }
+        let sourceCount = exchanges.values.filter { $0.source == source }.count
+        guard exchanges.count < 32, sourceCount < 4 else { throw Failure.capacityReached }
         let id = UUID().uuidString.lowercased()
         let nonce = ContinuityPairingMath.makeNonce()
         let transcript = try ContinuityV2AuthTranscript(
@@ -101,7 +105,7 @@ public actor ContinuityV2HostAuthorization {
         )
         let expiresAt = time.addingTimeInterval(120)
         exchanges[id] = Exchange(
-            client: client, transcript: transcript, requested: Self.supportedScopes.intersection(scopes),
+            client: client, source: source, transcript: transcript, requested: Self.supportedScopes.intersection(scopes),
             saveFormats: saveFormats, expiresAt: expiresAt
         )
         return Challenge(authId: id, server: server, nonce: nonce, expiresAt: expiresAt)
@@ -172,10 +176,15 @@ public actor ContinuityV2HostAuthorization {
         return Grant(client: grant.client, scopes: effective, saveFormats: grant.saveFormats)
     }
 
-    /// Revokes all active tokens and in-flight exchanges for a device across its apps.
+    /// Revokes all grants and exchanges for this signing identity across its apps.
     public func revoke(peerID: String) {
-        exchanges = exchanges.filter { $0.value.client.pid != peerID }
-        grants = grants.filter { $0.value.grant.client.pid != peerID }
+        revoke(peerIDs: [peerID])
+    }
+
+    /// Revokes every signing identity the host has associated with a device.
+    public func revoke(peerIDs: Set<String>) {
+        exchanges = exchanges.filter { !peerIDs.contains($0.value.client.pid) }
+        grants = grants.filter { !peerIDs.contains($0.value.grant.client.pid) }
     }
 
     private func prune(at time: Date) {

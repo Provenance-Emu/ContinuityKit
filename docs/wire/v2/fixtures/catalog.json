@@ -1,0 +1,103 @@
+{
+  "first": {
+    "request": {
+      "method": "GET",
+      "path": "/continuity/v2/catalog?systems=com.provenance.dreamcast&q=Example&limit=1",
+      "headers": {
+        "Authorization": "Bearer synthetic-bearer-fixture"
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "ETag": "\"page-1-fixture\"",
+        "Cache-Control": "private, no-cache"
+      },
+      "body": {
+        "catalogVersion": "a2e152521142b043fb1a4d33d6403d076dc862312ae6031c743bc42d29889d91",
+        "entries": [
+          {
+            "key": "demo-disc",
+            "identity": {
+              "system": "com.provenance.dreamcast",
+              "title": "Example Disc – Test",
+              "sizeBytes": 9,
+              "serial": "DEMO-001",
+              "discNumber": 0,
+              "revision": 1
+            },
+            "hasArtwork": true
+          }
+        ],
+        "nextCursor": "opaque-page-2"
+      }
+    }
+  },
+  "next": {
+    "request": {
+      "method": "GET",
+      "path": "/continuity/v2/catalog?systems=com.provenance.dreamcast&q=Example&limit=1&cursor=opaque-page-2",
+      "headers": {
+        "Authorization": "Bearer synthetic-bearer-fixture"
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "ETag": "\"page-2-fixture\"",
+        "Cache-Control": "private, no-cache"
+      },
+      "body": {
+        "catalogVersion": "a2e152521142b043fb1a4d33d6403d076dc862312ae6031c743bc42d29889d91",
+        "entries": [
+          {
+            "key": "demo-disc-2",
+            "identity": {
+              "system": "com.provenance.dreamcast",
+              "title": "Example Disc 2",
+              "sizeBytes": 9,
+              "serial": "DEMO-002",
+              "discNumber": 0,
+              "revision": 1
+            },
+            "hasArtwork": false
+          }
+        ]
+      }
+    }
+  },
+  "notModified": {
+    "request": {
+      "method": "GET",
+      "path": "/continuity/v2/catalog?systems=com.provenance.dreamcast&q=Example&limit=1",
+      "headers": {
+        "Authorization": "Bearer synthetic-bearer-fixture",
+        "If-None-Match": "\"page-1-fixture\""
+      }
+    },
+    "response": {
+      "status": 304,
+      "headers": {
+        "ETag": "\"page-1-fixture\"",
+        "Cache-Control": "private, no-cache"
+      }
+    }
+  },
+  "stale": {
+    "request": {
+      "method": "GET",
+      "path": "/continuity/v2/catalog?systems=com.provenance.dreamcast&q=Example&limit=1&cursor=opaque-page-2",
+      "headers": {
+        "Authorization": "Bearer synthetic-bearer-fixture"
+      }
+    },
+    "response": {
+      "status": 409,
+      "body": {
+        "error": {
+          "code": "catalogChanged"
+        }
+      }
+    }
+  }
+}

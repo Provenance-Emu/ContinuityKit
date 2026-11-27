@@ -1,0 +1,127 @@
+{
+  "waiting": {
+    "request": {
+      "method": "GET",
+      "path": "/continuity/v2/manifest?key=demo-disc&include=saves,bios,extras",
+      "headers": {
+        "Authorization": "Bearer synthetic-bearer-fixture"
+      }
+    },
+    "response": {
+      "status": 202,
+      "headers": {
+        "Retry-After": "2",
+        "Cache-Control": "private, no-store"
+      },
+      "body": {
+        "status": "pending"
+      }
+    }
+  },
+  "approved": {
+    "request": {
+      "method": "GET",
+      "path": "/continuity/v2/manifest?key=demo-disc&include=saves,bios,extras",
+      "headers": {
+        "Authorization": "Bearer synthetic-bearer-fixture"
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "Cache-Control": "private, no-store"
+      },
+      "body": {
+        "key": "demo-disc",
+        "identity": {
+          "system": "com.provenance.dreamcast",
+          "title": "Example Disc – Test",
+          "sizeBytes": 9,
+          "serial": "DEMO-001",
+          "discNumber": 0,
+          "revision": 1
+        },
+        "files": [
+          {
+            "path": "demo.gdi",
+            "kind": "game",
+            "sizeBytes": 4,
+            "sha256": "2a97516c354b68848cdbd8f54a226a0a55b21ed138e207ad6c5cbb9c00aa5aea",
+            "required": true
+          },
+          {
+            "path": "track 1.bin",
+            "kind": "game",
+            "sizeBytes": 5,
+            "sha256": "2bb8bf7259c4ea0edaef5b8552247e06dde993959d3d33e4a2b32f32e1144c0a",
+            "required": true
+          }
+        ]
+      }
+    }
+  },
+  "metered": {
+    "request": {
+      "method": "GET",
+      "path": "/continuity/v2/manifest?key=demo-disc&include=saves,bios,extras",
+      "headers": {
+        "Authorization": "Bearer synthetic-bearer-fixture"
+      }
+    },
+    "response": {
+      "status": 429,
+      "headers": {
+        "Retry-After": "60",
+        "Cache-Control": "private, no-store"
+      },
+      "body": {
+        "error": {
+          "code": "rateLimited"
+        }
+      }
+    }
+  },
+  "resumed": {
+    "request": {
+      "method": "GET",
+      "path": "/continuity/v2/file?key=demo-disc&path=track%201.bin",
+      "headers": {
+        "Authorization": "Bearer synthetic-bearer-fixture",
+        "Range": "bytes=2-"
+      }
+    },
+    "response": {
+      "status": 206,
+      "headers": {
+        "Content-Range": "bytes 2-4/5",
+        "Content-Length": "3"
+      },
+      "bodyBase64": "YWNr"
+    }
+  },
+  "outOfRange": {
+    "request": {
+      "method": "GET",
+      "path": "/continuity/v2/file?key=demo-disc&path=track%201.bin",
+      "headers": {
+        "Authorization": "Bearer synthetic-bearer-fixture",
+        "Range": "bytes=6-"
+      }
+    },
+    "response": {
+      "status": 416,
+      "headers": {
+        "Content-Range": "bytes */5"
+      },
+      "body": {
+        "error": {
+          "code": "invalidRange"
+        }
+      }
+    }
+  },
+  "syntheticFiles": {
+    "demo.gdi": "ZGVtbw==",
+    "track 1.bin": "dHJhY2s="
+  }
+}

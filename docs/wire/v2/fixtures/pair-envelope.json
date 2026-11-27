@@ -1,0 +1,31 @@
+{
+  "request": {
+    "method": "POST",
+    "path": "/continuity/v2/pair/start",
+    "body": {
+      "client": {
+        "pid": "56475aa75463474c0285df5dbf2bcab73da651358839e9b77481b2eab107708c",
+        "app": "provenance",
+        "name": "Fixture iPad",
+        "publicKey": "A6EHv/POEL4dcN0Y50vAmWfk1jCbpQ1fHdyGZBJVMbg="
+      }
+    }
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "pairId": "fixture-pair-1",
+      "server": {
+        "pid": "24f6ed6acbfe1009c030d7ca567c33ca4830911498236b5561a6c82abec5de28",
+        "app": "ifly",
+        "name": "Fixture Mac",
+        "publicKey": "Kay64UG8yvCyLhqU000LxzYeUm0L/hLIl5S8kyKWbdc="
+      },
+      "nonce": "Hx4dHBsaGRgXFhUUExIREA8ODQwLCgkIBwYFBAMCAQA=",
+      "expiresAt": "2026-11-25T12:00:30Z"
+    },
+    "headers": {
+      "Cache-Control": "private, no-store"
+    }
+  }
+}

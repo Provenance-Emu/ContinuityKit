@@ -30,3 +30,7 @@ push version tags by hand: such a tag has no binary and builds from source.
 
 ZIPFoundation is linked inside `ContinuityKit.framework` and is not part of its interface.
 An app that also uses ZIPFoundation carries its own copy.
+
+## Continuity v2
+
+See the [v2 wire specification and fixtures](docs/wire/v2/README.md).

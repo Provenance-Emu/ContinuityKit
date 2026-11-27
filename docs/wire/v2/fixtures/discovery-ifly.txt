@@ -1,0 +1,12 @@
+v=2
+app=ifly
+pid=24f6ed6acbfe1009c030d7ca567c33ca4830911498236b5561a6c82abec5de28
+dt=mc
+cap=lc
+sys=dreamcast
+cv=a2e15252
+u0=http://192.0.2.14:43100
+u1=http://fixture-mac.local:43100
+gs=dreamcast
+gk=demo-disc
+gt=Example Disc – Test

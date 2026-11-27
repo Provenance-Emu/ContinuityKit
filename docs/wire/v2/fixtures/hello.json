@@ -1,0 +1,30 @@
+{
+  "request": {
+    "method": "GET",
+    "path": "/continuity/v2/hello"
+  },
+  "response": {
+    "status": 200,
+    "body": {
+      "app": "ifly",
+      "appVersion": "2.0.0",
+      "protocolMinor": 0,
+      "systems": [
+        "com.provenance.dreamcast"
+      ],
+      "features": [
+        "library",
+        "continue",
+        "saves"
+      ],
+      "limits": {
+        "maxPageSize": 50,
+        "tokenLifetimeSeconds": 3600
+      },
+      "saveFormats": [
+        "save.battery.dc.vmu",
+        "save.state.flycast.42"
+      ]
+    }
+  }
+}

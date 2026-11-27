@@ -1,0 +1,37 @@
+{
+  "found": {
+    "request": {
+      "method": "GET",
+      "path": "/continuity/v2/art?key=demo-disc",
+      "headers": {
+        "Authorization": "Bearer synthetic-bearer-fixture"
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "ETag": "\"cover-fixture\"",
+        "Cache-Control": "private, no-cache",
+        "Content-Type": "image/png"
+      },
+      "bodyBase64": "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGNQaFgAAAIEAUFVgbBdAAAAAElFTkSuQmCC"
+    }
+  },
+  "notModified": {
+    "request": {
+      "method": "GET",
+      "path": "/continuity/v2/art?key=demo-disc",
+      "headers": {
+        "Authorization": "Bearer synthetic-bearer-fixture",
+        "If-None-Match": "\"cover-fixture\""
+      }
+    },
+    "response": {
+      "status": 304,
+      "headers": {
+        "ETag": "\"cover-fixture\"",
+        "Cache-Control": "private, no-cache"
+      }
+    }
+  }
+}

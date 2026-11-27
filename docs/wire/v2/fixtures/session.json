@@ -1,0 +1,81 @@
+{
+  "current": {
+    "request": {
+      "method": "GET",
+      "path": "/continuity/v2/session",
+      "headers": {
+        "Authorization": "Bearer synthetic-continue-saves-fixture"
+      }
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "key": "demo-disc",
+        "identity": {
+          "system": "com.provenance.dreamcast",
+          "title": "Example Disc – Test",
+          "sizeBytes": 9,
+          "serial": "DEMO-001",
+          "discNumber": 0,
+          "revision": 1
+        }
+      }
+    }
+  },
+  "mint": {
+    "request": {
+      "method": "POST",
+      "path": "/continuity/v2/session/mint",
+      "headers": {
+        "Authorization": "Bearer synthetic-continue-saves-fixture"
+      },
+      "body": {
+        "key": "demo-disc"
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "Cache-Control": "private, no-store"
+      },
+      "body": {
+        "key": "demo-disc",
+        "identity": {
+          "system": "com.provenance.dreamcast",
+          "title": "Example Disc – Test",
+          "sizeBytes": 9,
+          "serial": "DEMO-001",
+          "discNumber": 0,
+          "revision": 1
+        },
+        "files": [
+          {
+            "path": "demo.gdi",
+            "kind": "game",
+            "sizeBytes": 4,
+            "sha256": "2a97516c354b68848cdbd8f54a226a0a55b21ed138e207ad6c5cbb9c00aa5aea",
+            "required": true
+          },
+          {
+            "path": "track 1.bin",
+            "kind": "game",
+            "sizeBytes": 5,
+            "sha256": "2bb8bf7259c4ea0edaef5b8552247e06dde993959d3d33e4a2b32f32e1144c0a",
+            "required": true
+          },
+          {
+            "path": "demo.state",
+            "kind": "save.state.flycast.42",
+            "sizeBytes": 5,
+            "sha256": "4ba69735ca53765ed6a709edb56c6ea236b7193a3b29a6b390c346f0f4340e4e",
+            "required": false
+          }
+        ]
+      }
+    }
+  },
+  "syntheticFiles": {
+    "demo.state": "c3RhdGU="
+  },
+  "precondition": "The host has approved this separate token for continue and saves and verified the receiver supports save.state.flycast.42."
+}
